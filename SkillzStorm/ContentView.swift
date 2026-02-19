@@ -5,7 +5,7 @@ struct ContentView: View {
     @ObservedObject var adManager = AdManager.shared
     @State private var selectedTab = 0
     @State private var showFreeRewards = false
-    @State private var showStormStore = false
+    
     
     var body: some View {
         ZStack {

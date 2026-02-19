@@ -59,7 +59,6 @@ struct SkillzStormApp: App {
             ContentView()
                 .environmentObject(PlayerProgress.shared)
                 .environmentObject(AdManager.shared)
-                .environmentObject(StoreManager.shared)
                 .preferredColorScheme(.dark)
         }
     }

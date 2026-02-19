@@ -37,18 +37,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
-      console.log(`[Webhook] Payment succeeded: ${session.id} — $${(session.amount_total || 0) / 100}`);
-      console.log(`[Webhook] Items: ${session.metadata?.item_ids}`);
-      console.log(`[Webhook] Customer: ${session.customer_email}`);
+      const meta = session.metadata || {};
+      const allItems = (meta.item_ids || '').split(',').filter(Boolean);
+      const digitalItems = (meta.digital_item_ids || '').split(',').filter(Boolean);
+      const linkCode = meta.link_code || '';
+      const email = session.customer_email || '';
+      const amount = (session.amount_total || 0) / 100;
+
+      // All order data is stored in the Stripe session itself.
+      // Use /api/orders?secret=YOUR_KEY to view recent orders.
+      // Use /api/verify-purchase to let the iOS app check entitlements.
+
+      console.log(`[ORDER] $${amount} | ${allItems.join(', ')} | ${email} | code:${linkCode}`);
+
+      if (digitalItems.includes('ad_free') || digitalItems.includes('premium')) {
+        console.log(`[DIGITAL] Ad-free granted → ${linkCode || email}`);
+      }
+      if (meta.has_physical === 'true') {
+        console.log(`[SHIP] Physical order needs fulfillment → ${session.id}`);
+      }
+
       break;
     }
     case 'payment_intent.payment_failed': {
       const intent = event.data.object as Stripe.PaymentIntent;
-      console.log(`[Webhook] Payment failed: ${intent.id}`);
+      console.log(`[FAILED] Payment failed: ${intent.id}`);
       break;
     }
     default:
-      console.log(`[Webhook] Unhandled event: ${event.type}`);
+      console.log(`[Webhook] ${event.type}`);
   }
 
   return res.status(200).json({ received: true });

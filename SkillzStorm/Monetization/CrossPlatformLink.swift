@@ -1,24 +1,13 @@
 import SwiftUI
 import Combine
 
-// ═══════════════════════════════════════════════════════════════
-// CROSS-PLATFORM ACCOUNT LINKING
-//
-// Since we don't require login, we use a simple CODE SYSTEM:
-// 1. User generates a unique 8-character code in the app
-// 2. User enters code on skillzstorm.com
-// 3. Website purchases (Stripe) are linked to the device
-// 4. Benefits sync both ways
-//
-// This is stored locally with the code → UserDefaults
-// When Firestore is added later, this can sync to the cloud
-// ═══════════════════════════════════════════════════════════════
-
 class CrossPlatformLink: ObservableObject {
     static let shared = CrossPlatformLink()
     
     @Published var linkCode: String
     @Published var isLinked: Bool
+    @Published var isSyncing = false
+    @Published var lastSyncResult: String?
     
     private init() {
         let ud = UserDefaults.standard
@@ -33,7 +22,7 @@ class CrossPlatformLink: ObservableObject {
     }
     
     static func generateCode() -> String {
-        let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // No confusing chars (0/O, 1/I)
+        let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return String((0..<8).map { _ in chars.randomElement()! })
     }
     
@@ -41,28 +30,107 @@ class CrossPlatformLink: ObservableObject {
         let newCode = CrossPlatformLink.generateCode()
         linkCode = newCode
         UserDefaults.standard.set(newCode, forKey: "linkCode")
+        isLinked = false
+        UserDefaults.standard.set(false, forKey: "isLinked")
     }
     
-    /// URL to link on the website
     var webLinkURL: URL? {
         URL(string: "https://skillzstorm.com/link?code=\(linkCode)")
     }
     
-    /// Deep link to redeem a code from website
+    /// Redeem a code entered manually
     func redeemCode(_ code: String) {
-        // In a full implementation, this would:
-        // 1. Call your server to validate the code
-        // 2. Fetch any purchases linked to that code
-        // 3. Apply benefits (ad-free, coins, etc.)
-        // For now, we just mark as linked
         isLinked = true
         UserDefaults.standard.set(true, forKey: "isLinked")
+        Task { await syncPurchases(code: code) }
+    }
+    
+    /// Sync purchases from the server using the link code
+    @MainActor
+    func syncPurchases(code: String? = nil) async {
+        let syncCode = code ?? linkCode
+        guard !syncCode.isEmpty else { return }
+        
+        isSyncing = true
+        defer { isSyncing = false }
+        
+        guard let url = URL(string: "https://skillzstorm.com/api/verify-purchase") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+        
+        let body: [String: String] = ["linkCode": syncCode]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                lastSyncResult = "Server error"
+                return
+            }
+            
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                lastSyncResult = "Invalid response"
+                return
+            }
+            
+            let progress = PlayerProgress.shared
+            var changes: [String] = []
+            
+            if let adFree = json["isAdFree"] as? Bool, adFree {
+                if !progress.isAdFree {
+                    progress.isAdFree = true
+                    AdManager.shared.updateAdVisibility()
+                    changes.append("Ad-free")
+                }
+            }
+            
+            if let premium = json["isPremium"] as? Bool, premium {
+                if !progress.isPremium {
+                    progress.isPremium = true
+                    changes.append("Premium")
+                }
+            }
+            
+            if let seasonPass = json["hasSeasonPass"] as? Bool, seasonPass {
+                if !progress.hasSeasonPass {
+                    progress.hasSeasonPass = true
+                    changes.append("Season Pass")
+                }
+            }
+            
+            if let coins = json["totalCoins"] as? Int, coins > 0 {
+                let previouslyAwarded = UserDefaults.standard.integer(forKey: "syncedCoins_\(syncCode)")
+                let newCoins = coins - previouslyAwarded
+                if newCoins > 0 {
+                    progress.addCoins(newCoins)
+                    UserDefaults.standard.set(coins, forKey: "syncedCoins_\(syncCode)")
+                    changes.append("\(newCoins) coins")
+                }
+            }
+            
+            if changes.isEmpty {
+                lastSyncResult = "Up to date"
+            } else {
+                isLinked = true
+                UserDefaults.standard.set(true, forKey: "isLinked")
+                lastSyncResult = "Synced: \(changes.joined(separator: ", "))"
+            }
+            
+            print("[CrossPlatformLink] Sync result: \(lastSyncResult ?? "nil")")
+            
+        } catch {
+            lastSyncResult = "Network error"
+            print("[CrossPlatformLink] Sync failed: \(error)")
+        }
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
 // MARK: - Link Account View
-// ═══════════════════════════════════════════════════════════════
 
 struct LinkAccountView: View {
     @Environment(\.dismiss) var dismiss
@@ -77,13 +145,12 @@ struct LinkAccountView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        // Header
                         VStack(spacing: 8) {
                             Text("🔗").font(.system(size: 60))
                             Text("LINK YOUR ACCOUNT")
                                 .font(.system(size: 24, weight: .black, design: .rounded))
                                 .foregroundStyle(StormColors.heroGradient)
-                            Text("Connect your app and website for shared benefits")
+                            Text("Connect your app and website purchases")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
                                 .multilineTextAlignment(.center)
@@ -131,6 +198,46 @@ struct LinkAccountView: View {
                                     .foregroundColor(.white.opacity(0.5))
                                 }
                             }
+                            
+                            Text("Enter this code at skillzstorm.com/premium when you buy")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.4))
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(20)
+                        .glassCard()
+                        
+                        // Sync button
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                Task { await link.syncPurchases() }
+                            }) {
+                                HStack(spacing: 8) {
+                                    if link.isSyncing {
+                                        ProgressView().tint(.white)
+                                    } else {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                    }
+                                    Text(link.isSyncing ? "Syncing..." : "Sync Purchases")
+                                        .font(.headline.bold())
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(StormColors.heroGradient)
+                                .cornerRadius(16)
+                            }
+                            .disabled(link.isSyncing)
+                            
+                            if let result = link.lastSyncResult {
+                                Text(result)
+                                    .font(.caption)
+                                    .foregroundColor(
+                                        result.starts(with: "Synced") ? StormColors.neonGreen :
+                                        result == "Up to date" ? .white.opacity(0.5) :
+                                        StormColors.neonYellow
+                                    )
+                            }
                         }
                         .padding(20)
                         .glassCard()
@@ -143,68 +250,28 @@ struct LinkAccountView: View {
                                 .tracking(2)
                             
                             stepRow(num: "1", text: "Copy your code above")
-                            stepRow(num: "2", text: "Go to skillzstorm.com/link")
-                            stepRow(num: "3", text: "Enter your code on the website")
-                            stepRow(num: "4", text: "Your purchases sync across both platforms!")
-                        }
-                        .padding(20)
-                        .glassCard()
-                        
-                        // Redeem from website
-                        VStack(spacing: 12) {
-                            Text("HAVE A WEB CODE?")
-                                .font(.caption.bold())
-                                .foregroundColor(StormColors.neonYellow)
-                                .tracking(2)
-                            
-                            Text("If you bought something on the website, enter the code you got here:")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                                .multilineTextAlignment(.center)
-                            
-                            HStack {
-                                TextField("Enter code", text: $inputCode)
-                                    .font(.system(.body, design: .monospaced).bold())
-                                    .foregroundColor(.white)
-                                    .autocapitalization(.allCharacters)
-                                    .padding()
-                                    .background(StormColors.surface)
-                                    .cornerRadius(12)
-                                
-                                Button(action: {
-                                    if inputCode.count == 8 {
-                                        link.redeemCode(inputCode)
-                                    }
-                                }) {
-                                    Text("Redeem")
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 14)
-                                        .background(StormColors.heroGradient)
-                                        .cornerRadius(12)
-                                }
-                            }
+                            stepRow(num: "2", text: "Go to skillzstorm.com/premium")
+                            stepRow(num: "3", text: "Paste your code when you buy")
+                            stepRow(num: "4", text: "Tap \"Sync Purchases\" to activate!")
                         }
                         .padding(20)
                         .glassCard()
                         
                         // Benefits
                         VStack(spacing: 10) {
-                            Text("LINKED BENEFITS")
+                            Text("WHAT SYNCS")
                                 .font(.caption.bold())
                                 .foregroundColor(StormColors.neonPurple)
                                 .tracking(2)
                             
-                            benefitRow("Ad-free syncs between app and website")
-                            benefitRow("Coins earned on either platform sync")
-                            benefitRow("Premium status carries over")
-                            benefitRow("Physical orders tracked on both")
+                            benefitRow("Ad-free status removes all ads in the app")
+                            benefitRow("Coins purchased on website added to your balance")
+                            benefitRow("Premium status unlocks exclusive content")
+                            benefitRow("Season pass activates in the app")
                         }
                         .padding(20)
                         .glassCard()
                         
-                        // Link status
                         if link.isLinked {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")

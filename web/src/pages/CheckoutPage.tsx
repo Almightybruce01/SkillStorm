@@ -23,6 +23,15 @@ export function CheckoutPage() {
   useEffect(() => {
     if (isSuccess) {
       localStorage.removeItem('skillzstorm_cart');
+      // Check if the purchase included ad-free or premium digital products
+      const lastDigital = localStorage.getItem('skillzstorm_pending_digital');
+      if (lastDigital) {
+        const items = lastDigital.split(',');
+        if (items.includes('ad_free') || items.includes('premium')) {
+          localStorage.setItem('skillzstorm_ad_free', 'true');
+        }
+        localStorage.removeItem('skillzstorm_pending_digital');
+      }
       return;
     }
     const savedCart = localStorage.getItem('skillzstorm_cart');
@@ -32,7 +41,7 @@ export function CheckoutPage() {
   }, [isSuccess]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = total >= 50 ? 0 : 4.99;
+  const shipping = total >= 50 ? 0 : 5.99;
   const hasPhysical = cart.some(item =>
     ['vr_lite','vr_pro','vr_ultra','3d_basic','3d_polarized','3d_clip','controller','headphones','stand'].includes(item.id)
   );
@@ -48,6 +57,15 @@ export function CheckoutPage() {
     setIsProcessing(true);
     setError(null);
 
+    const digitalItems = cart
+      .filter(item => !['vr_lite','vr_pro','vr_ultra','3d_basic','3d_polarized','3d_clip','controller','headphones','stand'].includes(item.id))
+      .map(item => item.id);
+    if (digitalItems.length > 0) {
+      localStorage.setItem('skillzstorm_pending_digital', digitalItems.join(','));
+    }
+
+    const linkCode = localStorage.getItem('skillzstorm_link_code') || undefined;
+
     try {
       const res = await fetch('/api/create-checkout-session', {
         method: 'POST',
@@ -55,6 +73,7 @@ export function CheckoutPage() {
         body: JSON.stringify({
           items: cart.map(item => ({ id: item.id, quantity: item.quantity })),
           email: email || undefined,
+          linkCode,
         }),
       });
 
@@ -80,7 +99,7 @@ export function CheckoutPage() {
         <h1 className="text-3xl font-black text-gray-800 mb-3">ORDER CONFIRMED!</h1>
         <p className="text-gray-600 mb-6 max-w-md">
           Thank you for your purchase! You'll receive a confirmation email shortly.
-          Physical items typically ship within 2-3 business days.
+          Physical items typically ship within 5-10 business days. Digital items are instant — open the SkillzStorm app and tap "Sync Purchases" to activate.
         </p>
         <Link to="/" className="gradient-hero px-8 py-3 rounded-xl font-bold text-gray-800">
           Back to Home
@@ -214,7 +233,7 @@ export function CheckoutPage() {
 
           <p className="text-center text-gray-300 text-xs mt-4">
             You'll be redirected to Stripe's secure checkout to complete your purchase.
-            <br />Physical items ship within 2-3 business days. Digital items are instant.
+            <br />Physical items ship within 5-10 business days. Digital items sync to the iOS app instantly.
           </p>
         </>
       )}

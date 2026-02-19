@@ -1,7 +1,6 @@
 import SwiftUI
-import StoreKit
 
-// MARK: - VR & 3D Store + Premium IAP
+// MARK: - VR & 3D Store
 
 struct StoreItem: Identifiable {
     let id: String
@@ -18,43 +17,40 @@ struct StoreItem: Identifiable {
 struct VRStoreView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var progress = PlayerProgress.shared
-    @StateObject var storeManager = StoreManager.shared
     @State private var selectedCategory = "All"
     @State private var cart: [StoreItem] = []
     @State private var showCheckout = false
-    @State private var showIAPStore = false
     @State private var showFreeRewards = false
     
     let categories = ["All", "VR Headsets", "3D Glasses", "Accessories", "Premium"]
     
     // ── Physical goods (ship via Stripe on website) ──
-    // ── Digital goods are handled via StoreKit IAP (showIAPStore) ──
     let storeItems: [StoreItem] = [
         // VR Headsets (PHYSICAL → Stripe)
-        StoreItem(id: "vr_storm_1", name: "StormVR Lite", description: "Entry-level phone-in-headset. Insert your iPhone, launch any StormVR game, and experience immersive learning. Adjustable straps, comfortable foam padding.", price: "$29.99", emoji: "🥽", category: "VR Headsets", features: ["Lightweight design", "Adjustable straps", "Works with iPhone/Android", "Fits all ages", "Includes controller"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "vr_lite", name: "StormVR Lite", description: "Entry-level phone-in-headset. Insert your iPhone, launch any StormVR game, and experience immersive learning. Adjustable straps, comfortable foam padding.", price: "$39.99", emoji: "🥽", category: "VR Headsets", features: ["Lightweight design", "Adjustable straps", "Works with iPhone/Android", "Fits all ages", "Includes controller"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "vr_storm_pro", name: "StormVR Pro", description: "Premium standalone VR headset. No phone needed — SkillzStorm is built in. 6DOF tracking, 2K displays, hand tracking.", price: "$149.99", emoji: "🎧", category: "VR Headsets", features: ["Standalone — no phone needed", "Built-in SkillzStorm app", "High-res 2K displays", "6DOF head + hand tracking", "2-hour battery", "WiFi + Bluetooth"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "vr_pro", name: "StormVR Pro", description: "Premium standalone VR headset. No phone needed — SkillzStorm is built in. 6DOF tracking, 2K displays, hand tracking.", price: "$179.99", emoji: "🎧", category: "VR Headsets", features: ["Standalone — no phone needed", "Built-in SkillzStorm app", "High-res 2K displays", "6DOF head + hand tracking", "2-hour battery", "WiFi + Bluetooth"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "vr_storm_ultra", name: "StormVR Ultra", description: "Top-tier VR with eye tracking, haptic controllers, and 4K displays. The ultimate learning experience.", price: "$299.99", emoji: "🔮", category: "VR Headsets", features: ["Eye tracking", "Haptic controllers", "4K per-eye", "Wireless PC streaming", "Passthrough cameras", "5-hour battery"], inStock: false, isPhysicalGood: true),
+        StoreItem(id: "vr_ultra", name: "StormVR Ultra", description: "Top-tier VR with eye tracking, haptic controllers, and 4K displays. The ultimate learning experience.", price: "$349.99", emoji: "🔮", category: "VR Headsets", features: ["Eye tracking", "Haptic controllers", "4K per-eye", "Wireless PC streaming", "Passthrough cameras", "5-hour battery"], inStock: false, isPhysicalGood: true),
         
         // 3D Glasses (PHYSICAL → Stripe)
-        StoreItem(id: "3d_basic", name: "Storm3D Basic", description: "Classic red/cyan anaglyph 3D glasses. Pack of 5. Works with all Storm3D games.", price: "$4.99", emoji: "👓", category: "3D Glasses", features: ["Pack of 5 glasses", "Classic red/cyan", "Works on any screen", "Scratch-resistant"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "3d_basic", name: "Storm3D Basic", description: "Classic red/cyan anaglyph 3D glasses. Pack of 5. Works with all Storm3D games.", price: "$7.99", emoji: "👓", category: "3D Glasses", features: ["Pack of 5 glasses", "Classic red/cyan", "Works on any screen", "Scratch-resistant"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "3d_polarized", name: "Storm3D Polarized", description: "Polarized 3D glasses for color-accurate 3D viewing. No distortion.", price: "$14.99", emoji: "🕶️", category: "3D Glasses", features: ["Polarized lenses", "No color distortion", "Comfortable fit", "Premium build"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "3d_polarized", name: "Storm3D Polarized", description: "Polarized 3D glasses for color-accurate 3D viewing. No distortion.", price: "$19.99", emoji: "🕶️", category: "3D Glasses", features: ["Polarized lenses", "No color distortion", "Comfortable fit", "Premium build"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "3d_clip", name: "Storm3D Clip-On", description: "Clip-on 3D lenses for people who wear glasses. Flip-up design.", price: "$9.99", emoji: "👁️", category: "3D Glasses", features: ["Clips onto glasses", "Universal fit", "Flip-up design", "Anti-scratch coating"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "3d_clip", name: "Storm3D Clip-On", description: "Clip-on 3D lenses for people who wear glasses. Flip-up design.", price: "$14.99", emoji: "👁️", category: "3D Glasses", features: ["Clips onto glasses", "Universal fit", "Flip-up design", "Anti-scratch coating"], inStock: true, isPhysicalGood: true),
         
         // Accessories (PHYSICAL → Stripe)
-        StoreItem(id: "controller_1", name: "StormPad Controller", description: "Bluetooth game controller designed for SkillzStorm. Dedicated Storm button for quick actions.", price: "$24.99", emoji: "🎮", category: "Accessories", features: ["Bluetooth 5.0", "iOS & Android", "8-hour battery", "Dedicated Storm button", "Ergonomic design"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "controller", name: "StormPad Controller", description: "Bluetooth game controller designed for SkillzStorm. Dedicated Storm button for quick actions.", price: "$34.99", emoji: "🎮", category: "Accessories", features: ["Bluetooth 5.0", "iOS & Android", "8-hour battery", "Dedicated Storm button", "Ergonomic design"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "headphones_1", name: "StormSound Buds", description: "Wireless earbuds with game audio optimization and low latency.", price: "$19.99", emoji: "🎵", category: "Accessories", features: ["Low latency gaming mode", "Spatial audio", "4-hour battery", "Sweat-resistant"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "headphones", name: "StormSound Buds", description: "Wireless earbuds with game audio optimization and low latency.", price: "$29.99", emoji: "🎵", category: "Accessories", features: ["Low latency gaming mode", "Spatial audio", "4-hour battery", "Sweat-resistant"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "stand_1", name: "StormStand", description: "Adjustable tablet/phone stand for hands-free gaming sessions.", price: "$12.99", emoji: "📱", category: "Accessories", features: ["Adjustable angle", "Foldable & portable", "Anti-slip base", "Fits all devices"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "stand", name: "StormStand", description: "Adjustable tablet/phone stand for hands-free gaming sessions.", price: "$17.99", emoji: "📱", category: "Accessories", features: ["Adjustable angle", "Foldable & portable", "Anti-slip base", "Fits all devices"], inStock: true, isPhysicalGood: true),
     ]
     
     var filteredItems: [StoreItem] {
         if selectedCategory == "All" { return storeItems }
-        if selectedCategory == "Premium" { return [] } // Premium handled by IAP sheet
+        if selectedCategory == "Premium" { return [] }
         return storeItems.filter { $0.category == selectedCategory }
     }
     
@@ -87,7 +83,7 @@ struct VRStoreView: View {
                         LazyVStack(spacing: 16) {
                             ForEach(filteredItems) { item in
                                 StoreItemCard(item: item) {
-                                    cart.append(item)
+                                    cart = cart + [item]
                                     SoundManager.shared.playButtonTap()
                                 }
                             }
@@ -118,9 +114,7 @@ struct VRStoreView: View {
                 showCheckout = false
             }
         }
-        .sheet(isPresented: $showIAPStore) {
-            StormStoreView()
-        }
+        
         .sheet(isPresented: $showFreeRewards) {
             FreeRewardsView()
         }
@@ -167,76 +161,37 @@ struct VRStoreView: View {
     }
     
     // ──────────────────────────────────────────
-    // MARK: - Premium Section (StoreKit IAP)
+    // MARK: - Premium Section (Website)
     // ──────────────────────────────────────────
     
     private var premiumSection: some View {
         VStack(spacing: 12) {
-            // Ad-Free
-            if !progress.isAdFree {
-                Button(action: { showIAPStore = true }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text("⭐").font(.title2)
-                                Text("REMOVE ADS")
-                                    .font(.headline.bold())
-                                    .foregroundColor(.white)
-                            }
-                            Text("No more interruptions. One-time purchase.")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                        Spacer()
-                        Text(storeManager.product(for: .adFree)?.displayPrice ?? "$2.99")
-                            .font(.headline.bold())
-                            .foregroundColor(StormColors.neonGreen)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(StormColors.neonGreen.opacity(0.15))
-                            .cornerRadius(10)
-                    }
-                    .padding(16)
-                    .background(
-                        LinearGradient(colors: [Color.purple.opacity(0.2), Color.blue.opacity(0.1)],
-                                      startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .glassCard()
-                }
-            } else {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(StormColors.neonGreen)
-                    Text("AD-FREE ACTIVE")
-                        .font(.headline.bold())
-                        .foregroundColor(StormColors.neonGreen)
-                    Spacer()
-                }
-                .padding(16)
-                .glassCard()
-            }
-            
-            // Premium Bundle + Coins + Season Pass
-            Button(action: { showIAPStore = true }) {
+            Link(destination: URL(string: "https://skillzstorm.com/premium")!) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Text("👑").font(.title2)
-                            Text("PREMIUM BUNDLES & COINS")
-                                .font(.subheadline.bold())
+                            Text("GET PREMIUM")
+                                .font(.headline.bold())
                                 .foregroundColor(.white)
                         }
-                        Text("Ad-free, coins, season pass, and more")
+                        Text("Ad-free, coins, season pass, and more on skillzstorm.com")
                             .font(.caption)
                             .foregroundColor(.white.opacity(0.5))
                     }
                     Spacer()
-                    Image(systemName: "chevron.right.circle.fill")
-                        .foregroundColor(StormColors.neonYellow)
+                    VStack(spacing: 4) {
+                        Image(systemName: "arrow.up.right.square.fill")
+                            .font(.title2)
+                            .foregroundColor(StormColors.neonYellow)
+                        Text("Visit Website")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.5))
+                    }
                 }
                 .padding(16)
                 .background(
-                    LinearGradient(colors: [Color.orange.opacity(0.2), Color.yellow.opacity(0.1)],
+                    LinearGradient(colors: [Color.purple.opacity(0.2), Color.blue.opacity(0.1)],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .glassCard()
@@ -575,18 +530,16 @@ struct CheckoutView: View {
                             Image(systemName: "shippingbox.fill")
                                 .font(.title2)
                                 .foregroundColor(StormColors.neonBlue)
-                            Text("Physical items ship from our warehouse")
+                            Text("Ships directly to your door")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
-                            Text("Free shipping on orders over $50")
+                            Text("5-10 business days • Free over $50")
                                 .font(.caption.bold())
                                 .foregroundColor(StormColors.neonGreen)
                         }
                         
-                        // Stripe checkout button
                         Button(action: {
-                            // Opens Stripe Checkout on the web
-                            if let url = URL(string: "https://skillzstorm.com/checkout") {
+                            if let url = URL(string: "https://skillzstorm.com/store") {
                                 UIApplication.shared.open(url)
                             }
                         }) {

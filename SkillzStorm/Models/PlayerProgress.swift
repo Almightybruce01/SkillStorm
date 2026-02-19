@@ -52,7 +52,7 @@ class PlayerProgress: ObservableObject {
         didSet { save("hasSeasonPass", value: hasSeasonPass) }
     }
     
-    /// Alias for totalCoins (used by StoreManager)
+    /// Alias for totalCoins
     var coins: Int {
         get { totalCoins }
         set { totalCoins = newValue }

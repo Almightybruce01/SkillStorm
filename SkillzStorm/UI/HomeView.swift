@@ -7,7 +7,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showStore = false
     @State private var showFreeRewards = false
-    @State private var showIAPStore = false
+    
     @State private var showBattlePass = false
     @State private var showCosmeticsShop = false
     @State private var logoScale: CGFloat = 0.5
@@ -87,9 +87,7 @@ struct HomeView: View {
             .sheet(isPresented: $showFreeRewards) {
                 FreeRewardsView()
             }
-            .sheet(isPresented: $showIAPStore) {
-                StormStoreView()
-            }
+            
             .sheet(isPresented: $showBattlePass) {
                 BattlePassView()
             }
@@ -211,43 +209,7 @@ struct HomeView: View {
                 .glassCard()
             }
             
-            // Premium upsell
-            if !progress.isPremium {
-                Button(action: { showIAPStore = true }) {
-                    HStack(spacing: 14) {
-                        Text("👑")
-                            .font(.title2)
-                            .frame(width: 44, height: 44)
-                            .background(StormColors.neonPurple.opacity(0.15))
-                            .cornerRadius(12)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("GO PREMIUM")
-                                .font(.subheadline.bold())
-                                .foregroundColor(.white)
-                            Text("Ad-free + coins + exclusive content")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                        
-                        Spacer()
-                        
-                        Text("$4.99")
-                            .font(.caption.bold())
-                            .foregroundColor(StormColors.neonGreen)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(StormColors.neonGreen.opacity(0.15))
-                            .cornerRadius(8)
-                    }
-                    .padding(14)
-                    .background(
-                        LinearGradient(colors: [StormColors.neonPurple.opacity(0.06), StormColors.neonBlue.opacity(0.04)],
-                                      startPoint: .leading, endPoint: .trailing)
-                    )
-                    .glassCard()
-                }
-            }
+            
         }
     }
     
