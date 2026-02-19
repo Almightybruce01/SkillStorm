@@ -26,14 +26,15 @@ class AdManager: NSObject, ObservableObject {
     // ──────────────────────────────────────────
     
     #if DEBUG
-    private let bannerAdUnitID     = "ca-app-pub-3940256099942544/2934735716"   // Test banner
-    private let interstitialAdID   = "ca-app-pub-3940256099942544/4411468910"   // Test interstitial
-    private let rewardedAdID       = "ca-app-pub-3940256099942544/1712485313"   // Test rewarded
+    private let bannerAdUnitID     = "ca-app-pub-3940256099942544/2934735716"
+    private let interstitialAdID   = "ca-app-pub-3940256099942544/4411468910"
+    private let rewardedAdID       = "ca-app-pub-3940256099942544/1712485313"
+    private let appOpenAdID        = "ca-app-pub-3940256099942544/5575463023"
     #else
-    // ⚠️ PUT YOUR REAL AD UNIT IDS HERE FOR PRODUCTION
-    private let bannerAdUnitID     = "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
-    private let interstitialAdID   = "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
-    private let rewardedAdID       = "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+    private let bannerAdUnitID     = "ca-app-pub-9418265198529416/1044892153"
+    private let interstitialAdID   = "ca-app-pub-9418265198529416/8731810484"
+    private let rewardedAdID       = "ca-app-pub-9418265198529416/9154917088"
+    private let appOpenAdID        = "ca-app-pub-9418265198529416/APPOPENHERE"
     #endif
     
     // State
@@ -44,7 +45,9 @@ class AdManager: NSObject, ObservableObject {
     
     private var interstitialAd: InterstitialAd?
     private var rewardedAd: RewardedAd?
+    private var appOpenAd: AppOpenAd?
     private var rewardCompletion: ((Bool) -> Void)?
+    private var appOpenAdLoadTime: Date?
     
     // Tracking
     private var gamesPlayedSinceLastAd = 0
@@ -59,14 +62,6 @@ class AdManager: NSObject, ObservableObject {
     // ─────────────────────────────────────────
     
     func initialize() {
-        // Skip AdMob init if GADApplicationIdentifier is still a placeholder
-        guard let appId = Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") as? String,
-              !appId.contains("XXXX") else {
-            print("[AdManager] Skipping init — GADApplicationIdentifier is a placeholder. Replace it with your real AdMob App ID.")
-            updateAdVisibility()
-            return
-        }
-        
         // COPPA COMPLIANCE: Mark all ad requests as child-directed
         MobileAds.shared.requestConfiguration.tagForChildDirectedTreatment = true
         MobileAds.shared.requestConfiguration.maxAdContentRating = .general
@@ -77,6 +72,7 @@ class AdManager: NSObject, ObservableObject {
             Task { @MainActor in
                 self.loadInterstitial()
                 self.loadRewarded()
+                self.loadAppOpenAd()
             }
         }
         
@@ -216,19 +212,63 @@ class AdManager: NSObject, ObservableObject {
             completion(success)
         }
     }
+    // ─────────────────────────────────────────
+    // MARK: - App Open Ad (shows when returning to app)
+    // ─────────────────────────────────────────
+    
+    private func loadAppOpenAd() {
+        guard !PlayerProgress.shared.isAdFree else { return }
+        guard !appOpenAdID.contains("APPOPENHERE") else { return }
+        
+        AppOpenAd.load(with: appOpenAdID, request: GoogleMobileAds.Request()) { [weak self] ad, error in
+            if let error = error {
+                print("[AdManager] App open load error: \(error.localizedDescription)")
+                return
+            }
+            guard let self else { return }
+            Task { @MainActor [self] in
+                self.appOpenAd = ad
+                self.appOpenAd?.fullScreenContentDelegate = self
+                self.appOpenAdLoadTime = Date()
+                print("[AdManager] App open ad ready")
+            }
+        }
+    }
+    
+    func showAppOpenAd() {
+        guard !PlayerProgress.shared.isAdFree else { return }
+        
+        // Don't show if ad is older than 4 hours
+        if let loadTime = appOpenAdLoadTime, Date().timeIntervalSince(loadTime) > 4 * 3600 {
+            appOpenAd = nil
+            loadAppOpenAd()
+            return
+        }
+        
+        guard let ad = appOpenAd else {
+            loadAppOpenAd()
+            return
+        }
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            ad.present(from: rootVC)
+        }
+    }
 }
 
 // MARK: - Full Screen Ad Delegate
 
 extension AdManager: FullScreenContentDelegate {
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
-        // Reload the next ad
         if ad is InterstitialAd {
             isInterstitialReady = false
             loadInterstitial()
         } else if ad is RewardedAd {
             isRewardedReady = false
             loadRewarded()
+        } else if ad is AppOpenAd {
+            loadAppOpenAd()
         }
     }
     
@@ -239,6 +279,8 @@ extension AdManager: FullScreenContentDelegate {
         } else if ad is RewardedAd {
             loadRewarded()
             rewardCompletion?(false)
+        } else if ad is AppOpenAd {
+            loadAppOpenAd()
         }
     }
 }

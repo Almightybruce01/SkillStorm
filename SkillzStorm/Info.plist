@@ -4,7 +4,7 @@
 <dict>
 	<!-- Google AdMob — Required for AdMob SDK -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-9418265198529416~1388107704</string>
 
 	<!-- SKAdNetwork for Google -->
 	<key>SKAdNetworkItems</key>

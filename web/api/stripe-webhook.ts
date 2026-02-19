@@ -13,6 +13,56 @@ async function buffer(readable: VercelRequest): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+const PHYSICAL_IDS = new Set([
+  'vr_lite', 'vr_pro', 'vr_ultra',
+  '3d_basic', '3d_polarized', '3d_clip',
+  'controller', 'headphones', 'stand',
+]);
+
+async function autoFulfillPhysical(session: Stripe.Checkout.Session) {
+  const meta = session.metadata || {};
+  const items = (meta.item_ids || '').split(',').filter(Boolean);
+  const physicalItems = items.filter(id => PHYSICAL_IDS.has(id));
+
+  if (physicalItems.length === 0) return;
+
+  const shipping = session.shipping_details;
+  if (!shipping?.address) {
+    console.log(`[FULFILL] No shipping address for ${session.id}, manual fulfillment needed`);
+    return;
+  }
+
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'https://skillzstorm.com';
+
+  try {
+    const resp = await fetch(`${baseUrl}/api/cj-fulfill`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-fulfill-secret': process.env.ORDERS_SECRET || '',
+      },
+      body: JSON.stringify({
+        sessionId: session.id,
+        items: physicalItems,
+        shippingName: shipping.name || '',
+        shippingAddress: [shipping.address.line1, shipping.address.line2].filter(Boolean).join(', '),
+        shippingCity: shipping.address.city || '',
+        shippingState: shipping.address.state || '',
+        shippingZip: shipping.address.postal_code || '',
+        shippingCountry: shipping.address.country || 'US',
+        email: session.customer_email || '',
+      }),
+    });
+
+    const result = await resp.json();
+    console.log(`[FULFILL] ${session.id}: ${JSON.stringify(result)}`);
+  } catch (err) {
+    console.error(`[FULFILL] Auto-fulfill failed for ${session.id}:`, err);
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -44,17 +94,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const email = session.customer_email || '';
       const amount = (session.amount_total || 0) / 100;
 
-      // All order data is stored in the Stripe session itself.
-      // Use /api/orders?secret=YOUR_KEY to view recent orders.
-      // Use /api/verify-purchase to let the iOS app check entitlements.
-
       console.log(`[ORDER] $${amount} | ${allItems.join(', ')} | ${email} | code:${linkCode}`);
 
       if (digitalItems.includes('ad_free') || digitalItems.includes('premium')) {
         console.log(`[DIGITAL] Ad-free granted → ${linkCode || email}`);
       }
+
       if (meta.has_physical === 'true') {
-        console.log(`[SHIP] Physical order needs fulfillment → ${session.id}`);
+        console.log(`[SHIP] Physical order → auto-fulfilling via CJ...`);
+        // Retrieve full session with shipping details for fulfillment
+        const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+          expand: ['shipping_details'],
+        });
+        await autoFulfillPhysical(fullSession);
       }
 
       break;

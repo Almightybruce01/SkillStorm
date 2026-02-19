@@ -54,12 +54,19 @@ struct SkillzStormApp: App {
         MultiplayerService.shared.authenticate()
     }
     
+    @Environment(\.scenePhase) private var scenePhase
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(PlayerProgress.shared)
                 .environmentObject(AdManager.shared)
                 .preferredColorScheme(.dark)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                AdManager.shared.showAppOpenAd()
+            }
         }
     }
 }
