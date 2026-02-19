@@ -17,6 +17,9 @@ const PHYSICAL_IDS = new Set([
   'vr_lite', 'vr_pro', 'vr_ultra',
   '3d_basic', '3d_polarized', '3d_clip',
   'controller', 'headphones', 'stand',
+  'pencil_case', 'gel_pens', 'sticker_pack', 'backpack', 'erasers', 'notebook',
+  'labubu', 'mini_figures', 'squishy_toy', 'blind_bag',
+  'pop_it', 'fidget_cube', 'fidget_spinner', 'magnetic_rings', 'stress_ball', 'fidget_slug', 'infinity_cube',
 ]);
 
 async function autoFulfillPhysical(session: Stripe.Checkout.Session) {

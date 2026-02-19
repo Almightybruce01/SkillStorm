@@ -22,30 +22,46 @@ struct VRStoreView: View {
     @State private var showCheckout = false
     @State private var showFreeRewards = false
     
-    let categories = ["All", "VR Headsets", "3D Glasses", "Accessories", "Premium"]
+    let categories = ["All", "VR Headsets", "3D Glasses", "Accessories", "School Supplies", "Toys", "Fidgets", "Premium"]
     
-    // ── Physical goods (ship via Stripe on website) ──
     let storeItems: [StoreItem] = [
-        // VR Headsets (PHYSICAL → Stripe)
-        StoreItem(id: "vr_lite", name: "StormVR Lite", description: "Entry-level phone-in-headset. Insert your iPhone, launch any StormVR game, and experience immersive learning. Adjustable straps, comfortable foam padding.", price: "$39.99", emoji: "🥽", category: "VR Headsets", features: ["Lightweight design", "Adjustable straps", "Works with iPhone/Android", "Fits all ages", "Includes controller"], inStock: true, isPhysicalGood: true),
+        // VR Headsets
+        StoreItem(id: "vr_lite", name: "StormVR Lite", description: "Phone-in-headset for immersive VR. Insert your iPhone, launch any StormVR game.", price: "$39.99", emoji: "🥽", category: "VR Headsets", features: ["Lightweight design", "Adjustable straps", "Works with iPhone/Android", "Fits all ages", "Includes controller"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "vr_pro", name: "StormVR Pro", description: "Standalone VR headset. No phone needed. 6DOF tracking, 2K displays, hand tracking.", price: "$179.99", emoji: "🎧", category: "VR Headsets", features: ["Standalone — no phone", "Built-in SkillzStorm", "High-res 2K displays", "6DOF tracking", "2-hour battery"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "vr_ultra", name: "StormVR Ultra", description: "Top-tier VR with eye tracking, haptic feedback, and 4K displays. Coming Q3 2026.", price: "$349.99", emoji: "🔮", category: "VR Headsets", features: ["Eye tracking", "Haptic controllers", "4K per-eye", "Wireless streaming", "5-hour battery"], inStock: false, isPhysicalGood: true),
         
-        StoreItem(id: "vr_pro", name: "StormVR Pro", description: "Premium standalone VR headset. No phone needed — SkillzStorm is built in. 6DOF tracking, 2K displays, hand tracking.", price: "$179.99", emoji: "🎧", category: "VR Headsets", features: ["Standalone — no phone needed", "Built-in SkillzStorm app", "High-res 2K displays", "6DOF head + hand tracking", "2-hour battery", "WiFi + Bluetooth"], inStock: true, isPhysicalGood: true),
+        // 3D Glasses
+        StoreItem(id: "3d_basic", name: "Storm3D Basic (5-pack)", description: "Classic red/cyan 3D glasses. Works with all Storm3D games.", price: "$7.99", emoji: "👓", category: "3D Glasses", features: ["Pack of 5", "Classic red/cyan", "Works on any screen", "Scratch-resistant"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "3d_polarized", name: "Storm3D Polarized", description: "Polarized 3D glasses for color-accurate viewing. No distortion.", price: "$19.99", emoji: "🕶️", category: "3D Glasses", features: ["Polarized lenses", "No color distortion", "Comfortable fit", "Premium build"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "3d_clip", name: "Storm3D Clip-On", description: "Clip-on 3D lenses for glasses wearers. Flip-up design.", price: "$14.99", emoji: "👁️", category: "3D Glasses", features: ["Clips onto glasses", "Universal fit", "Flip-up design", "Anti-scratch"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "vr_ultra", name: "StormVR Ultra", description: "Top-tier VR with eye tracking, haptic controllers, and 4K displays. The ultimate learning experience.", price: "$349.99", emoji: "🔮", category: "VR Headsets", features: ["Eye tracking", "Haptic controllers", "4K per-eye", "Wireless PC streaming", "Passthrough cameras", "5-hour battery"], inStock: false, isPhysicalGood: true),
+        // Accessories
+        StoreItem(id: "controller", name: "StormPad Controller", description: "Bluetooth game controller for SkillzStorm. Dedicated Storm button.", price: "$34.99", emoji: "🎮", category: "Accessories", features: ["Bluetooth 5.0", "iOS & Android & Web", "8-hour battery", "Storm button", "Ergonomic"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "headphones", name: "StormSound Buds", description: "Wireless earbuds with low-latency gaming mode and spatial audio.", price: "$29.99", emoji: "🎵", category: "Accessories", features: ["Low latency mode", "Spatial audio", "4-hour battery", "Sweat-resistant"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "stand", name: "StormStand", description: "Adjustable tablet/phone stand for hands-free gaming.", price: "$17.99", emoji: "📱", category: "Accessories", features: ["Adjustable angle", "Foldable & portable", "Anti-slip base", "Fits all devices"], inStock: true, isPhysicalGood: true),
         
-        // 3D Glasses (PHYSICAL → Stripe)
-        StoreItem(id: "3d_basic", name: "Storm3D Basic", description: "Classic red/cyan anaglyph 3D glasses. Pack of 5. Works with all Storm3D games.", price: "$7.99", emoji: "👓", category: "3D Glasses", features: ["Pack of 5 glasses", "Classic red/cyan", "Works on any screen", "Scratch-resistant"], inStock: true, isPhysicalGood: true),
+        // School Supplies
+        StoreItem(id: "pencil_case", name: "Storm Pencil Case", description: "Cartoon lightning-bolt pencil pouch. Holds 40+ pens & pencils.", price: "$12.99", emoji: "✏️", category: "School Supplies", features: ["Holds 40+ pens", "Lightning bolt design", "Zip-top closure", "Inner organizer"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "gel_pens", name: "Rainbow Gel Pens (12-pack)", description: "12 vibrant gel pens with kawaii character toppers.", price: "$9.99", emoji: "🖊️", category: "School Supplies", features: ["12 colors", "Kawaii toppers", "Smooth gel ink", "No-smudge"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "sticker_pack", name: "Storm Sticker Pack (50pc)", description: "50 waterproof vinyl stickers — gaming & school designs.", price: "$7.99", emoji: "⭐", category: "School Supplies", features: ["50 stickers", "Waterproof vinyl", "Gaming & school mix", "Laptop safe"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "backpack", name: "Storm Cartoon Backpack", description: "Lightweight school backpack with cartoon lightning design. Laptop pocket.", price: "$29.99", emoji: "🎒", category: "School Supplies", features: ["Cartoon design", "Padded straps", "Laptop pocket", "Water-resistant"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "erasers", name: "Fun Erasers Set (20pc)", description: "20 mini animal & food shaped erasers. Collectible and tradeable!", price: "$6.99", emoji: "🧹", category: "School Supplies", features: ["20 pieces", "Animal & food shapes", "Collectible", "Actually erases!"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "notebook", name: "Storm Notebook (3-pack)", description: "A5 lined notebooks with holographic covers. 80 pages each.", price: "$8.99", emoji: "📓", category: "School Supplies", features: ["3 notebooks", "Holographic covers", "80 pages each", "A5 lined"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "3d_polarized", name: "Storm3D Polarized", description: "Polarized 3D glasses for color-accurate 3D viewing. No distortion.", price: "$19.99", emoji: "🕶️", category: "3D Glasses", features: ["Polarized lenses", "No color distortion", "Comfortable fit", "Premium build"], inStock: true, isPhysicalGood: true),
+        // Toys & Collectibles
+        StoreItem(id: "labubu", name: "Labubu Mystery Figure", description: "Blind box collectible Labubu mini figure. Which one will you get?", price: "$14.99", emoji: "🧸", category: "Toys", features: ["Blind box surprise", "Collectible figure", "Multiple series", "Display stand"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "mini_figures", name: "Mini Figures 5-Pack", description: "Surprise pack of 5 collectible mini characters. Trade with friends!", price: "$11.99", emoji: "🎭", category: "Toys", features: ["5 figures", "Surprise selection", "Poseable", "Tradeable"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "squishy_toy", name: "Kawaii Squishy Set (3pc)", description: "Slow-rise squishy toys — cute animal edition. So satisfying!", price: "$9.99", emoji: "🐱", category: "Toys", features: ["3 squishies", "Slow-rise foam", "Scented", "Kawaii animals"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "blind_bag", name: "Mystery Blind Bag", description: "Surprise toy bag — could be a figure, fidget, or something rare!", price: "$8.99", emoji: "🎁", category: "Toys", features: ["Total surprise", "Could be rare!", "Fun to collect", "Great gift"], inStock: true, isPhysicalGood: true),
         
-        StoreItem(id: "3d_clip", name: "Storm3D Clip-On", description: "Clip-on 3D lenses for people who wear glasses. Flip-up design.", price: "$14.99", emoji: "👁️", category: "3D Glasses", features: ["Clips onto glasses", "Universal fit", "Flip-up design", "Anti-scratch coating"], inStock: true, isPhysicalGood: true),
-        
-        // Accessories (PHYSICAL → Stripe)
-        StoreItem(id: "controller", name: "StormPad Controller", description: "Bluetooth game controller designed for SkillzStorm. Dedicated Storm button for quick actions.", price: "$34.99", emoji: "🎮", category: "Accessories", features: ["Bluetooth 5.0", "iOS & Android", "8-hour battery", "Dedicated Storm button", "Ergonomic design"], inStock: true, isPhysicalGood: true),
-        
-        StoreItem(id: "headphones", name: "StormSound Buds", description: "Wireless earbuds with game audio optimization and low latency.", price: "$29.99", emoji: "🎵", category: "Accessories", features: ["Low latency gaming mode", "Spatial audio", "4-hour battery", "Sweat-resistant"], inStock: true, isPhysicalGood: true),
-        
-        StoreItem(id: "stand", name: "StormStand", description: "Adjustable tablet/phone stand for hands-free gaming sessions.", price: "$17.99", emoji: "📱", category: "Accessories", features: ["Adjustable angle", "Foldable & portable", "Anti-slip base", "Fits all devices"], inStock: true, isPhysicalGood: true),
+        // Fidgets
+        StoreItem(id: "pop_it", name: "Rainbow Pop-It", description: "Tie-dye rainbow push-pop fidget. Satisfying clicks, endless fun!", price: "$8.99", emoji: "🫧", category: "Fidgets", features: ["Rainbow tie-dye", "Satisfying pops", "Dishwasher safe", "Silicone"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "fidget_cube", name: "Fidget Cube Pro", description: "6-sided fidget cube — click, spin, flip, glide, roll.", price: "$9.99", emoji: "🎲", category: "Fidgets", features: ["6 fidget sides", "Click, spin, flip", "Pocket-sized", "Silent mode"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "fidget_spinner", name: "LED Fidget Spinner", description: "Light-up spinner with 3 LED modes. Spins 2+ minutes!", price: "$7.99", emoji: "🌀", category: "Fidgets", features: ["3 LED modes", "2+ min spin", "Glow in dark", "Metal bearings"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "magnetic_rings", name: "Magnetic Fidget Rings (3pc)", description: "Magnetic ring fidgets — spin, stack, roll. Oddly satisfying.", price: "$11.99", emoji: "💫", category: "Fidgets", features: ["3 magnetic rings", "Spin & stack", "Holographic", "Carry case"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "stress_ball", name: "Squishy Stress Balls (4pc)", description: "Neon mesh squeeze balls — 4 colors. Squeeze, stretch, squish!", price: "$8.99", emoji: "🟡", category: "Fidgets", features: ["4 neon colors", "Mesh squeeze", "Durable gel", "Stress relief"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "fidget_slug", name: "Articulated Fidget Slug", description: "3D-printed slug. Twist and bend for satisfying clicking.", price: "$10.99", emoji: "🐛", category: "Fidgets", features: ["Articulated body", "Satisfying clicks", "Multiple colors", "Desk toy"], inStock: true, isPhysicalGood: true),
+        StoreItem(id: "infinity_cube", name: "Infinity Cube", description: "Endless flipping cube — pocket-sized focus tool. Flip forever!", price: "$9.99", emoji: "♾️", category: "Fidgets", features: ["Infinite flipping", "ABS plastic", "Pocket-sized", "Silent fidget"], inStock: true, isPhysicalGood: true),
     ]
     
     var filteredItems: [StoreItem] {
@@ -130,7 +146,7 @@ struct VRStoreView: View {
             Text("STORM STORE")
                 .font(.system(size: 28, weight: .black, design: .rounded))
                 .foregroundStyle(StormColors.goldGradient)
-            Text("VR Headsets • 3D Glasses • Premium • Rewards")
+            Text("VR • 3D • School Supplies • Toys • Fidgets")
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.6))
         }
@@ -365,7 +381,7 @@ struct VRStoreView: View {
                 }
             }
             
-            Text("Digital purchases via Apple • Physical goods via Stripe")
+            Text("All purchases via Stripe on skillzstorm.com")
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.3))
         }

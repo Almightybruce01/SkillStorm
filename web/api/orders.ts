@@ -3,9 +3,14 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-01-28.clover' as any });
 
-const PHYSICAL_IDS = new Set(['vr_lite', 'vr_pro', 'vr_ultra', '3d_basic', '3d_polarized', '3d_clip', 'controller', 'headphones', 'stand']);
+const PHYSICAL_IDS = new Set([
+  'vr_lite', 'vr_pro', 'vr_ultra', '3d_basic', '3d_polarized', '3d_clip',
+  'controller', 'headphones', 'stand',
+  'pencil_case', 'gel_pens', 'sticker_pack', 'backpack', 'erasers', 'notebook',
+  'labubu', 'mini_figures', 'squishy_toy', 'blind_bag',
+  'pop_it', 'fidget_cube', 'fidget_spinner', 'magnetic_rings', 'stress_ball', 'fidget_slug', 'infinity_cube',
+]);
 
-// Map product IDs to CJ Dropshipping search terms so you can find + order instantly
 const CJ_SEARCH: Record<string, string> = {
   vr_lite: 'VR headset phone holder 3D glasses',
   vr_pro: 'standalone VR headset 6DOF',
@@ -16,6 +21,23 @@ const CJ_SEARCH: Record<string, string> = {
   controller: 'bluetooth game controller mobile',
   headphones: 'wireless earbuds low latency gaming',
   stand: 'adjustable phone tablet stand',
+  pencil_case: 'cartoon pencil case pouch kids',
+  gel_pens: 'kawaii gel pens 12 pack colorful',
+  sticker_pack: 'vinyl sticker pack 50 pcs gaming',
+  backpack: 'cartoon school backpack kids lightweight',
+  erasers: 'mini animal erasers set cute food',
+  notebook: 'holographic notebook A5 lined',
+  labubu: 'labubu blind box figure collectible',
+  mini_figures: 'mini collectible figures surprise pack',
+  squishy_toy: 'kawaii squishy toy slow rise animal',
+  blind_bag: 'mystery toy blind bag kids surprise',
+  pop_it: 'pop it fidget rainbow tie dye',
+  fidget_cube: 'fidget cube 6 sided stress relief',
+  fidget_spinner: 'LED fidget spinner light up',
+  magnetic_rings: 'magnetic fidget rings 3 pack',
+  stress_ball: 'mesh stress ball neon squeeze',
+  fidget_slug: 'articulated fidget slug 3D printed',
+  infinity_cube: 'infinity cube fidget toy ABS',
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

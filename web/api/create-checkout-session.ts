@@ -24,6 +24,29 @@ const PRODUCT_CATALOG: Record<string, {
   headphones:    { name: 'StormSound Buds',            unit_amount: 2999,  currency: 'usd', type: 'physical', description: 'Wireless earbuds — low-latency gaming mode' },
   stand:         { name: 'StormStand',                 unit_amount: 1799,  currency: 'usd', type: 'physical', description: 'Adjustable tablet/phone stand' },
 
+  // ── School Supplies (cartoonish, fun for kids) ──
+  pencil_case:   { name: 'Storm Pencil Case',            unit_amount: 1299,  currency: 'usd', type: 'physical', description: 'Cartoon lightning-bolt pencil pouch — holds 40+ pens' },
+  gel_pens:      { name: 'Rainbow Gel Pens (12-pack)',    unit_amount: 999,   currency: 'usd', type: 'physical', description: '12 vibrant gel pens with kawaii toppers' },
+  sticker_pack:  { name: 'Storm Sticker Pack (50pc)',     unit_amount: 799,   currency: 'usd', type: 'physical', description: '50 waterproof vinyl stickers — gaming & school mix' },
+  backpack:      { name: 'Storm Cartoon Backpack',        unit_amount: 2999,  currency: 'usd', type: 'physical', description: 'Lightweight school backpack with cartoon lightning design' },
+  erasers:       { name: 'Fun Erasers Set (20pc)',        unit_amount: 699,   currency: 'usd', type: 'physical', description: '20 mini animal & food shaped erasers' },
+  notebook:      { name: 'Storm Notebook (3-pack)',       unit_amount: 899,   currency: 'usd', type: 'physical', description: 'A5 lined notebooks with holographic covers' },
+
+  // ── Toys & Collectibles ──
+  labubu:        { name: 'Labubu Mystery Figure',         unit_amount: 1499,  currency: 'usd', type: 'physical', description: 'Blind box collectible Labubu mini figure' },
+  mini_figures:  { name: 'Mini Figures 5-Pack',           unit_amount: 1199,  currency: 'usd', type: 'physical', description: 'Surprise pack of 5 collectible mini characters' },
+  squishy_toy:   { name: 'Kawaii Squishy Set (3pc)',      unit_amount: 999,   currency: 'usd', type: 'physical', description: 'Slow-rise squishy toys — animal edition' },
+  blind_bag:     { name: 'Mystery Blind Bag',             unit_amount: 899,   currency: 'usd', type: 'physical', description: 'Surprise toy bag — could be anything!' },
+
+  // ── Fidgets ──
+  pop_it:        { name: 'Rainbow Pop-It',                unit_amount: 899,   currency: 'usd', type: 'physical', description: 'Tie-dye rainbow push-pop fidget — satisfying clicks' },
+  fidget_cube:   { name: 'Fidget Cube Pro',               unit_amount: 999,   currency: 'usd', type: 'physical', description: '6-sided fidget cube — click, spin, flip, glide' },
+  fidget_spinner:{ name: 'LED Fidget Spinner',            unit_amount: 799,   currency: 'usd', type: 'physical', description: 'Light-up spinner with 3 LED modes' },
+  magnetic_rings:{ name: 'Magnetic Fidget Rings (3pc)',   unit_amount: 1199,  currency: 'usd', type: 'physical', description: 'Magnetic ring fidgets — spin, stack, roll' },
+  stress_ball:   { name: 'Squishy Stress Balls (4pc)',    unit_amount: 899,   currency: 'usd', type: 'physical', description: 'Neon mesh squeeze balls — 4 colors' },
+  fidget_slug:   { name: 'Articulated Fidget Slug',       unit_amount: 1099,  currency: 'usd', type: 'physical', description: '3D-printed articulated slug — satisfying movement' },
+  infinity_cube: { name: 'Infinity Cube',                 unit_amount: 999,   currency: 'usd', type: 'physical', description: 'Endless flipping cube — pocket-sized focus tool' },
+
   // ── Digital products (pure profit minus Stripe's 2.9% + $0.30) ──
   ad_free:       { name: 'Ad-Free Forever',            unit_amount: 299,   currency: 'usd', type: 'digital', description: 'Remove all ads from SkillzStorm permanently' },
   premium:       { name: 'Premium Bundle',             unit_amount: 499,   currency: 'usd', type: 'digital', description: 'Ad-free + 5,000 coins + exclusive content' },

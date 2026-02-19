@@ -34,7 +34,7 @@ class AdManager: NSObject, ObservableObject {
     private let bannerAdUnitID     = "ca-app-pub-9418265198529416/1044892153"
     private let interstitialAdID   = "ca-app-pub-9418265198529416/8731810484"
     private let rewardedAdID       = "ca-app-pub-9418265198529416/9154917088"
-    private let appOpenAdID        = "ca-app-pub-9418265198529416/APPOPENHERE"
+    private let appOpenAdID        = "ca-app-pub-9418265198529416/2397937040"
     #endif
     
     // State
@@ -218,7 +218,6 @@ class AdManager: NSObject, ObservableObject {
     
     private func loadAppOpenAd() {
         guard !PlayerProgress.shared.isAdFree else { return }
-        guard !appOpenAdID.contains("APPOPENHERE") else { return }
         
         AppOpenAd.load(with: appOpenAdID, request: GoogleMobileAds.Request()) { [weak self] ad, error in
             if let error = error {

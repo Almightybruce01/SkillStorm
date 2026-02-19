@@ -42,9 +42,8 @@ export function CheckoutPage() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shipping = total >= 50 ? 0 : 5.99;
-  const hasPhysical = cart.some(item =>
-    ['vr_lite','vr_pro','vr_ultra','3d_basic','3d_polarized','3d_clip','controller','headphones','stand'].includes(item.id)
-  );
+  const PHYSICAL_IDS = ['vr_lite','vr_pro','vr_ultra','3d_basic','3d_polarized','3d_clip','controller','headphones','stand','pencil_case','gel_pens','sticker_pack','backpack','erasers','notebook','labubu','mini_figures','squishy_toy','blind_bag','pop_it','fidget_cube','fidget_spinner','magnetic_rings','stress_ball','fidget_slug','infinity_cube'];
+  const hasPhysical = cart.some(item => PHYSICAL_IDS.includes(item.id));
   const finalTotal = total + (hasPhysical ? shipping : 0);
 
   const removeItem = (id: string) => {
@@ -58,7 +57,7 @@ export function CheckoutPage() {
     setError(null);
 
     const digitalItems = cart
-      .filter(item => !['vr_lite','vr_pro','vr_ultra','3d_basic','3d_polarized','3d_clip','controller','headphones','stand'].includes(item.id))
+      .filter(item => !PHYSICAL_IDS.includes(item.id))
       .map(item => item.id);
     if (digitalItems.length > 0) {
       localStorage.setItem('skillzstorm_pending_digital', digitalItems.join(','));

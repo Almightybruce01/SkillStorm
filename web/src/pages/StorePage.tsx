@@ -26,9 +26,32 @@ const products: StoreProduct[] = [
   { id: 'controller', name: 'StormPad Controller', description: 'Bluetooth game controller optimized for SkillzStorm. Dedicated Storm button for quick actions.', price: '$34.99', priceNum: 34.99, emoji: '🎮', category: 'Accessories', features: ['Bluetooth 5.0', 'iOS & Android & Web', '8-hour battery', 'Storm button', 'Ergonomic design'], inStock: true, isPhysical: true, accentColor: '#3b82f6' },
   { id: 'headphones', name: 'StormSound Buds', description: 'Wireless earbuds with low-latency gaming mode and spatial audio.', price: '$29.99', priceNum: 29.99, emoji: '🎵', category: 'Accessories', features: ['Low latency mode', 'Spatial audio', '4-hour battery', 'Sweat-resistant'], inStock: true, isPhysical: true, accentColor: '#8b5cf6' },
   { id: 'stand', name: 'StormStand', description: 'Adjustable tablet/phone stand for hands-free gaming.', price: '$17.99', priceNum: 17.99, emoji: '📱', category: 'Accessories', features: ['Adjustable angle', 'Foldable & portable', 'Anti-slip base', 'Fits all devices'], inStock: true, isPhysical: true, accentColor: '#f97316' },
+
+  // School Supplies
+  { id: 'pencil_case', name: 'Storm Pencil Case', description: 'Cartoon lightning-bolt pencil pouch that holds 40+ pens & pencils. Zip-top with inner organizer.', price: '$12.99', priceNum: 12.99, emoji: '✏️', category: 'School Supplies', features: ['Holds 40+ pens', 'Lightning bolt design', 'Zip-top closure', 'Inner organizer', 'Durable canvas'], inStock: true, isPhysical: true, accentColor: '#f59e0b' },
+  { id: 'gel_pens', name: 'Rainbow Gel Pens (12-pack)', description: '12 vibrant gel pens with kawaii character toppers. Smooth ink, no smudging.', price: '$9.99', priceNum: 9.99, emoji: '🖊️', category: 'School Supplies', features: ['12 colors', 'Kawaii toppers', 'Smooth gel ink', 'No-smudge formula'], inStock: true, isPhysical: true, accentColor: '#ec4899' },
+  { id: 'sticker_pack', name: 'Storm Sticker Pack (50pc)', description: '50 waterproof vinyl stickers — mix of gaming, school, and SkillzStorm designs.', price: '$7.99', priceNum: 7.99, emoji: '⭐', category: 'School Supplies', features: ['50 stickers', 'Waterproof vinyl', 'Gaming & school mix', 'Laptop & bottle safe'], inStock: true, isPhysical: true, accentColor: '#10b981' },
+  { id: 'backpack', name: 'Storm Cartoon Backpack', description: 'Lightweight school backpack with cartoon lightning design. Padded straps, laptop pocket.', price: '$29.99', priceNum: 29.99, emoji: '🎒', category: 'School Supplies', features: ['Cartoon design', 'Padded straps', 'Laptop pocket', 'Water-resistant', 'Multiple compartments'], inStock: true, isPhysical: true, accentColor: '#3b82f6' },
+  { id: 'erasers', name: 'Fun Erasers Set (20pc)', description: '20 mini animal & food shaped erasers. Collectible, tradeable, and actually work!', price: '$6.99', priceNum: 6.99, emoji: '🧹', category: 'School Supplies', features: ['20 pieces', 'Animal & food shapes', 'Collectible', 'Actually erases!'], inStock: true, isPhysical: true, accentColor: '#8b5cf6' },
+  { id: 'notebook', name: 'Storm Notebook (3-pack)', description: 'A5 lined notebooks with holographic covers. 80 pages each.', price: '$8.99', priceNum: 8.99, emoji: '📓', category: 'School Supplies', features: ['3 notebooks', 'Holographic covers', '80 pages each', 'A5 lined'], inStock: true, isPhysical: true, accentColor: '#06b6d4' },
+
+  // Toys & Collectibles
+  { id: 'labubu', name: 'Labubu Mystery Figure', description: 'Blind box collectible Labubu mini figure. Which one will you get? Collect them all!', price: '$14.99', priceNum: 14.99, emoji: '🧸', category: 'Toys', features: ['Blind box surprise', 'Collectible figure', 'Multiple series', 'Display stand included'], inStock: true, isPhysical: true, accentColor: '#ec4899' },
+  { id: 'mini_figures', name: 'Mini Figures 5-Pack', description: 'Surprise pack of 5 collectible mini characters. Trade with friends!', price: '$11.99', priceNum: 11.99, emoji: '🎭', category: 'Toys', features: ['5 figures', 'Surprise selection', 'Poseable', 'Tradeable'], inStock: true, isPhysical: true, accentColor: '#f97316' },
+  { id: 'squishy_toy', name: 'Kawaii Squishy Set (3pc)', description: 'Slow-rise squishy toys — cute animal edition. Stress relief meets cuteness.', price: '$9.99', priceNum: 9.99, emoji: '🐱', category: 'Toys', features: ['3 squishies', 'Slow-rise foam', 'Scented', 'Kawaii animals'], inStock: true, isPhysical: true, accentColor: '#f59e0b' },
+  { id: 'blind_bag', name: 'Mystery Blind Bag', description: 'Surprise toy bag — could be a figure, fidget, accessory, or something rare!', price: '$8.99', priceNum: 8.99, emoji: '🎁', category: 'Toys', features: ['Total surprise', 'Could be rare!', 'Fun to collect', 'Great gift'], inStock: true, isPhysical: true, accentColor: '#8b5cf6' },
+
+  // Fidgets
+  { id: 'pop_it', name: 'Rainbow Pop-It', description: 'Tie-dye rainbow push-pop fidget. Satisfying clicks, endless fun. Dishwasher safe!', price: '$8.99', priceNum: 8.99, emoji: '🫧', category: 'Fidgets', features: ['Rainbow tie-dye', 'Satisfying pops', 'Dishwasher safe', 'Silicone material'], inStock: true, isPhysical: true, accentColor: '#10b981' },
+  { id: 'fidget_cube', name: 'Fidget Cube Pro', description: '6-sided fidget cube — click, spin, flip, glide, roll, and breathe. Pocket-sized focus.', price: '$9.99', priceNum: 9.99, emoji: '🎲', category: 'Fidgets', features: ['6 fidget sides', 'Click, spin, flip', 'Pocket-sized', 'Silent mode side'], inStock: true, isPhysical: true, accentColor: '#3b82f6' },
+  { id: 'fidget_spinner', name: 'LED Fidget Spinner', description: 'Light-up spinner with 3 LED color modes. Spins 2+ minutes. Glow in the dark!', price: '$7.99', priceNum: 7.99, emoji: '🌀', category: 'Fidgets', features: ['3 LED modes', '2+ min spin time', 'Glow in dark', 'Metal bearings'], inStock: true, isPhysical: true, accentColor: '#8b5cf6' },
+  { id: 'magnetic_rings', name: 'Magnetic Fidget Rings (3pc)', description: 'Magnetic ring fidgets — spin, stack, roll between fingers. Oddly satisfying.', price: '$11.99', priceNum: 11.99, emoji: '💫', category: 'Fidgets', features: ['3 magnetic rings', 'Spin & stack', 'Holographic finish', 'Pocket carry case'], inStock: true, isPhysical: true, accentColor: '#f59e0b' },
+  { id: 'stress_ball', name: 'Squishy Stress Balls (4pc)', description: 'Neon mesh squeeze balls — 4 colors. Squeeze them, stretch them, squish them!', price: '$8.99', priceNum: 8.99, emoji: '🟡', category: 'Fidgets', features: ['4 neon colors', 'Mesh squeeze', 'Durable gel', 'Stress relief'], inStock: true, isPhysical: true, accentColor: '#ef4444' },
+  { id: 'fidget_slug', name: 'Articulated Fidget Slug', description: '3D-printed articulated slug. Twist and bend for satisfying clicking movement.', price: '$10.99', priceNum: 10.99, emoji: '🐛', category: 'Fidgets', features: ['Articulated body', 'Satisfying clicks', 'Multiple colors', 'Desk toy'], inStock: true, isPhysical: true, accentColor: '#06b6d4' },
+  { id: 'infinity_cube', name: 'Infinity Cube', description: 'Endless flipping cube — pocket-sized focus tool. Flip forever, stress never.', price: '$9.99', priceNum: 9.99, emoji: '♾️', category: 'Fidgets', features: ['Infinite flipping', 'ABS plastic', 'Pocket-sized', 'Silent fidget'], inStock: true, isPhysical: true, accentColor: '#f97316' },
 ];
 
-const storeCategories = ['All', 'VR Headsets', '3D Glasses', 'Accessories'];
+const storeCategories = ['All', 'VR Headsets', '3D Glasses', 'Accessories', 'School Supplies', 'Toys', 'Fidgets'];
 
 export function StorePage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -55,7 +78,7 @@ export function StorePage() {
         <h1 className="text-5xl sm:text-6xl font-black mb-3 relative">
           <span className="bg-gradient-to-r from-[#f59e0b] via-[#f97316] to-[#ef4444] bg-clip-text text-transparent">STORM STORE</span>
         </h1>
-        <p className="text-gray-400 text-sm">VR Headsets • 3D Glasses • Accessories</p>
+        <p className="text-gray-400 text-sm">VR Headsets • 3D Glasses • School Supplies • Toys • Fidgets • Accessories</p>
         <p className="text-xs text-gray-300 mt-2">All products ship to your door • Secure Stripe checkout • Free shipping over $50</p>
       </div>
 
