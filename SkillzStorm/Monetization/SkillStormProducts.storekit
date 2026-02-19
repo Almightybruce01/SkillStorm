@@ -1,0 +1,152 @@
+{
+  "identifier" : "7B8E3F4A-9E2C-4A6F-B5D1-3E2F1A4B5C6D",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "adfree001",
+      "localizations" : [
+        {
+          "description" : "Remove all ads from SkillzStorm permanently",
+          "displayName" : "Remove Ads",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.adfree",
+      "referenceName" : "Ad-Free Forever",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "coins500",
+      "localizations" : [
+        {
+          "description" : "500 coins to spend in the shop",
+          "displayName" : "500 Coins",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.coins500",
+      "referenceName" : "500 Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "3.99",
+      "familyShareable" : false,
+      "internalID" : "coins2500",
+      "localizations" : [
+        {
+          "description" : "2,500 coins + 250 bonus!",
+          "displayName" : "2,500 Coins",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.coins2500",
+      "referenceName" : "2500 Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "coins10000",
+      "localizations" : [
+        {
+          "description" : "10,000 coins + 2,000 bonus!",
+          "displayName" : "10,000 Coins",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.coins10000",
+      "referenceName" : "10000 Coins",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "premium001",
+      "localizations" : [
+        {
+          "description" : "Ad-free + 5,000 coins + exclusive skins and games",
+          "displayName" : "Premium Bundle",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.premiumBundle",
+      "referenceName" : "Premium Bundle",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "7.99",
+      "familyShareable" : false,
+      "internalID" : "season001",
+      "localizations" : [
+        {
+          "description" : "Unlock all premium games for this season",
+          "displayName" : "Season Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.skillzstorm.seasonPass",
+      "referenceName" : "Season Pass",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

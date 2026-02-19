@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="description" content="SkillzStorm - The Ultimate Educational Gaming Platform. Learn math, science, reading, and more through fun interactive games." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SkillzStorm" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#7c3aed" />
+    <meta name="google-adsense-account" content="ca-pub-9418265198529416" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>SkillzStorm - Learn Through Play</title>
+
+    <!-- SCROLL SAFETY NET — prevents stuck body styles from killing scroll -->
+    <style>
+      html { overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; }
+      body { overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; }
+      body.game-playing { overflow: hidden !important; position: fixed !important; width: 100% !important; height: 100% !important; }
+    </style>
+    <script>
+      // Clear stuck inline styles every second (safety net for game components)
+      setInterval(function() {
+        if (!document.body.classList.contains('game-playing')) {
+          if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+          if (document.body.style.position === 'fixed') document.body.style.position = '';
+          if (document.body.style.width) document.body.style.width = '';
+          if (document.body.style.height) document.body.style.height = '';
+        }
+      }, 1000);
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet" />
+    <!-- AdSense: uncomment when approved and set adsLive:true in AdConfig.ts
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9418265198529416" crossorigin="anonymous"></script>
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

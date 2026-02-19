@@ -1,0 +1,49 @@
+Add to ReactionTest.tsx for full Number test:
+
+1. After handlePositionClick, add:
+  const handleNumberClick = useCallback(
+    (n: number) => {
+      if (phase !== 'ready' || testType !== 'number' || n !== nextNumber) return;
+      if (n === 10) {
+        const now = performance.now();
+        const ms = Math.round(now - gameRef.current.readyAt);
+        setReactionMs(ms);
+        const fb = getFeedback(ms);
+        setFeedback(fb);
+        setRoundResults((prev) => [...prev, { reactionMs: ms, feedback: fb }]);
+        setPhase('result');
+      } else {
+        setNextNumber((prev) => prev + 1);
+      }
+    },
+    [phase, testType, nextNumber]
+  );
+
+2. In idle buttons, add button: onClick={() => handleStart('number')} "Number — Click 1–10 in order"
+
+3. After the count test block (phase === 'ready' && testType === 'count' && ...), add:
+            {phase === 'ready' && testType === 'number' && numberPositions.length > 0 && (
+              <div className="relative w-full h-full">
+                {numberPositions.map(({ n, x, y }) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`absolute w-12 h-12 rounded-lg font-bold border-2 ${
+                      n === nextNumber
+                        ? 'bg-amber-400 border-amber-600 ring-2 ring-amber-500 text-gray-900'
+                        : 'bg-white border-gray-300 text-gray-700'
+                    }`}
+                    style={{ left: x, top: y }}
+                    onClick={() => handleNumberClick(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
+
+4. In container className for ready, add: phase === 'ready' && testType === 'number' ? 'bg-gray-100 border-gray-200' (in the ternary chain)
+
+5. In container onClick, change to: testType !== 'position' && testType !== 'count' && testType !== 'number' ? () => handleClick() : undefined
+
+6. In startRound, reset: setNextNumber(1); setNumberPositions([]);

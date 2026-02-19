@@ -1,0 +1,838 @@
+/* ═══════════════════════════════════════════════════════════
+   TARGET RANGE ENGINE (~700 lines)
+   Canvas shooting: Number Ninja, World Map Shooter, etc.
+   Moving targets, wind/gravity, scope zoom, combo, lives
+   Environments: forest, desert, arctic (with 3D perspective)
+   ═══════════════════════════════════════════════════════════ */
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getQuestions, type Grade, type Question } from '../questionBank';
+import { getGameById } from '../../engine/gameData';
+
+type Subject = 'math' | 'science' | 'vocabulary';
+
+type EnvTheme = 'forest' | 'desert' | 'arctic';
+
+type TargetType = 'standard' | 'fast' | 'heavy' | 'bonus';
+
+interface Target {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  answer: string;
+  points: number;
+  radius: number;
+  pattern: 'linear' | 'sine' | 'circular';
+  t0: number;
+  cx?: number;
+  cy?: number;
+  r?: number;
+  correct?: boolean;
+  speed?: number;
+  type: TargetType;
+  rotation: number;
+  distance: number; // 0-1, for 3D perspective (0 = far, 1 = near)
+}
+
+interface Projectile {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  wind: number;
+  gravity: number;
+}
+
+interface HitMarker {
+  id: number;
+  x: number;
+  y: number;
+  life: number;
+  correct: boolean;
+}
+
+interface MissSplash {
+  id: number;
+  x: number;
+  y: number;
+  life: number;
+  particles: Array<{ x: number; y: number; vx: number; vy: number; life: number }>;
+}
+
+interface Props {
+  gameId: string;
+  grade: Grade;
+  onClose: () => void;
+  onRoundEnd?: (round: number, score: number) => void;
+}
+
+function mapSubject(subject: string): Subject {
+  if (subject === 'math') return 'math';
+  if (subject === 'science') return 'science';
+  return 'vocabulary';
+}
+
+function getSubject(gameId: string): Subject {
+  const game = getGameById(gameId);
+  if (!game) return 'math';
+  return mapSubject(game.subject);
+}
+
+const ENV_COLORS: Record<EnvTheme, { sky: string; ground: string; accent: string; horizon: string }> = {
+  forest: { sky: '#1e4620', ground: '#2d5016', accent: '#4ade80', horizon: '#166534' },
+  desert: { sky: '#fef3c7', ground: '#a16207', accent: '#fcd34d', horizon: '#fcd34d' },
+  arctic: { sky: '#0c4a6e', ground: '#64748b', accent: '#7dd3fc', horizon: '#0284c7' },
+};
+
+const TARGET_TYPE_CONFIG: Record<TargetType, { radius: number; speed: number; points: number; color: string; strokeColor: string }> = {
+  standard: { radius: 24, speed: 1.0, points: 50, color: '#4ade80', strokeColor: '#22c55e' },
+  fast: { radius: 16, speed: 1.8, points: 75, color: '#60a5fa', strokeColor: '#3b82f6' },
+  heavy: { radius: 36, speed: 0.5, points: 150, color: '#f87171', strokeColor: '#ef4444' },
+  bonus: { radius: 28, speed: 1.2, points: 200, color: '#fbbf24', strokeColor: '#f59e0b' },
+};
+
+const CANVAS_W = 640;
+const CANVAS_H = 480;
+const HORIZON_Y = CANVAS_H * 0.4; // Horizon line for 3D perspective
+const VANISHING_X = CANVAS_W / 2; // Vanishing point X
+const MAX_AMMO = 6;
+const BASE_WIND = 0.08;
+const GRAVITY = 0.12;
+const LIVES = 3;
+const ROUNDS_PER_LEVEL = 3;
+const COMBO_DECAY_MS = 2500;
+const ZOOM_LEVELS = [1.0, 1.5, 2.0, 2.5];
+let nextId = 0;
+
+export function TargetRange({ gameId, grade, onClose, onRoundEnd }: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const subject = getSubject(gameId);
+  const [round, setRound] = useState(1);
+  const [level, setLevel] = useState(1);
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(LIVES);
+  const [combo, setCombo] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [ammo, setAmmo] = useState(MAX_AMMO);
+  const [accuracy, setAccuracy] = useState({ hits: 0, shots: 0 });
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [targets, setTargets] = useState<Target[]>([]);
+  const [projectiles, setProjectiles] = useState<Projectile[]>([]);
+  const [hitMarkers, setHitMarkers] = useState<HitMarker[]>([]);
+  const [missSplashes, setMissSplashes] = useState<MissSplash[]>([]);
+  const [mouse, setMouse] = useState({ x: CANVAS_W / 2, y: CANVAS_H / 2 });
+  const [scopeZoom, setScopeZoom] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(0);
+  const [wind, setWind] = useState(0);
+  const [windDirection, setWindDirection] = useState(1); // 1 = right, -1 = left
+  const [windAnimation, setWindAnimation] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [envParticles, setEnvParticles] = useState<Array<{ x: number; y: number; vx: number; vy: number; life: number; type: 'snowflake' | 'bird' | 'shimmer' }>>([]);
+  const lastHitTimeRef = useRef(0);
+  const ammoRef = useRef(MAX_AMMO);
+  const roundEndScheduledRef = useRef(false);
+  const failRespawnScheduledRef = useRef(false);
+  ammoRef.current = ammo;
+  const animRef = useRef<number>(0);
+  const timeRef = useRef(0);
+  const questionsPoolRef = useRef<Question[]>([]);
+  const stateRef = useRef({ targets: [] as Target[], projectiles: [] as Projectile[], hitMarkers: [] as HitMarker[], missSplashes: [] as MissSplash[] });
+
+  const envTheme: EnvTheme = ['forest', 'desert', 'arctic'][(level - 1) % 3] as EnvTheme;
+  const env = ENV_COLORS[envTheme];
+
+  const loadQuestions = useCallback(() => {
+    const subs: Subject[] = subject === 'math' ? ['math'] : subject === 'science' ? ['science'] : ['vocabulary'];
+    const all: Question[] = [];
+    subs.forEach(s => all.push(...getQuestions(grade, s, 20)));
+    questionsPoolRef.current = all;
+  }, [grade, subject]);
+
+  useEffect(() => {
+    loadQuestions();
+  }, [loadQuestions]);
+
+  // Spawn environment particles
+  useEffect(() => {
+    if (envTheme === 'arctic') {
+      const interval = setInterval(() => {
+        setEnvParticles(prev => [...prev, {
+          x: Math.random() * CANVAS_W,
+          y: -10,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: 0.5 + Math.random() * 0.5,
+          life: 200,
+          type: 'snowflake',
+        }]);
+      }, 500);
+      return () => clearInterval(interval);
+    } else if (envTheme === 'forest') {
+      const interval = setInterval(() => {
+        if (Math.random() > 0.7) {
+          setEnvParticles(prev => [...prev, {
+            x: -20,
+            y: HORIZON_Y + Math.random() * 50,
+            vx: 1 + Math.random(),
+            vy: (Math.random() - 0.5) * 0.3,
+            life: 150,
+            type: 'bird',
+          }]);
+        }
+      }, 2000);
+      return () => clearInterval(interval);
+    } else if (envTheme === 'desert') {
+      const interval = setInterval(() => {
+        if (Math.random() > 0.8) {
+          setEnvParticles(prev => [...prev, {
+            x: Math.random() * CANVAS_W,
+            y: HORIZON_Y + Math.random() * 100,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: -0.2 - Math.random() * 0.2,
+            life: 100,
+            type: 'shimmer',
+          }]);
+        }
+      }, 300);
+      return () => clearInterval(interval);
+    }
+  }, [envTheme]);
+
+  const spawnTargets = useCallback(() => {
+    const pool = questionsPoolRef.current;
+    if (pool.length === 0) return;
+    const q = pool[Math.floor(Math.random() * pool.length)];
+    const opts = q.options.map((o, i) => ({ text: o, correct: i === q.correct }));
+    
+    // Change wind direction between rounds
+    const newWindDirection = Math.random() > 0.5 ? 1 : -1;
+    setWindDirection(newWindDirection);
+    const newWind = (Math.random() - 0.5) * BASE_WIND * 2.5 * newWindDirection;
+    setWind(newWind);
+    
+    const patterns: Target['pattern'][] = ['linear', 'sine', 'circular'];
+    const types: TargetType[] = ['standard', 'fast', 'heavy', 'bonus'];
+    const newTargets: Target[] = opts.map((opt, i) => {
+      const baseSpeed = 0.6 + level * 0.35 + (opt.correct ? 0.2 : 0);
+      const speed = baseSpeed * (0.8 + Math.random() * 0.4);
+      const pattern = patterns[i % 3];
+      
+      // Assign target type based on position and correctness
+      let type: TargetType = 'standard';
+      if (opt.correct && i === opts.length - 1 && Math.random() > 0.5) {
+        type = 'bonus';
+      } else if (i === 0 && Math.random() > 0.6) {
+        type = 'fast';
+      } else if (i === Math.floor(opts.length / 2) && Math.random() > 0.7) {
+        type = 'heavy';
+      }
+      
+      const config = TARGET_TYPE_CONFIG[type];
+      const distance = 0.3 + Math.random() * 0.5; // 0.3 to 0.8 for 3D effect
+      const baseY = HORIZON_Y + (CANVAS_H - HORIZON_Y) * (1 - distance);
+      const cx = VANISHING_X + (100 + (i * (CANVAS_W - 200) / Math.max(1, opts.length - 1)) - VANISHING_X) * distance;
+      const cy = baseY + (Math.random() - 0.5) * 60;
+      
+      return {
+        id: nextId++,
+        x: cx,
+        y: cy,
+        vx: pattern === 'linear' ? (Math.random() - 0.5) * speed * 2 : 0,
+        vy: pattern === 'linear' ? (Math.random() - 0.5) * speed * 2 : 0,
+        answer: opt.text,
+        points: opt.correct ? config.points + level * 30 + combo * 5 : 15,
+        radius: config.radius * distance, // Scale radius by distance for 3D
+        pattern,
+        t0: timeRef.current,
+        cx: pattern !== 'linear' ? cx : undefined,
+        cy: pattern !== 'linear' ? cy : undefined,
+        r: pattern === 'circular' ? (55 + level * 5) * distance : undefined,
+        correct: opt.correct,
+        speed: config.speed * speed,
+        type,
+        rotation: 0,
+        distance,
+      };
+    });
+    setQuestion(q);
+    setTargets(newTargets);
+    stateRef.current.targets = newTargets;
+  }, [level, combo]);
+
+  useEffect(() => {
+    if (questionsPoolRef.current.length > 0 && !gameOver) spawnTargets();
+  }, [level, spawnTargets, gameOver]);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      setMouse({ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY });
+    },
+    []
+  );
+
+  const handleMouseDown = useCallback(() => {
+    setScopeZoom(true);
+    setZoomLevel(prev => (prev + 1) % ZOOM_LEVELS.length);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    if (!scopeZoom) return;
+    setScopeZoom(false);
+    if (ammo <= 0) return;
+    const currentWind = wind;
+    const grav = GRAVITY;
+    const proj: Projectile = {
+      id: nextId++,
+      x: CANVAS_W / 2,
+      y: CANVAS_H - 50,
+      vx: currentWind,
+      vy: -7 - grav * 3,
+      life: 90,
+      wind: currentWind,
+      gravity: grav,
+    };
+    stateRef.current.projectiles = [...stateRef.current.projectiles, proj];
+    setProjectiles(prev => [...prev, proj]);
+    setAmmo(a => a - 1);
+    setAccuracy(acc => ({ ...acc, shots: acc.shots + 1 }));
+  }, [scopeZoom, ammo, wind]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const gameLoop = () => {
+      timeRef.current += 1;
+      const t = timeRef.current * 0.016;
+      const state = stateRef.current;
+      
+      // Animate wind indicator
+      setWindAnimation(prev => prev + 0.1);
+
+      // Update environment particles
+      setEnvParticles(prev => prev.map(p => ({
+        ...p,
+        x: p.x + p.vx,
+        y: p.y + p.vy,
+        life: p.life - 1,
+      })).filter(p => p.life > 0 && p.x >= -50 && p.x <= CANVAS_W + 50 && p.y >= -50 && p.y <= CANVAS_H + 50));
+
+      state.targets = state.targets.map(tg => {
+        let x = tg.x;
+        let y = tg.y;
+        let rotation = tg.rotation;
+        
+        if (tg.type === 'bonus') {
+          rotation += 0.05; // Spinning bonus targets
+        }
+        
+        if (tg.pattern === 'linear') {
+          x += tg.vx;
+          y += tg.vy;
+          if (x < tg.radius || x > CANVAS_W - tg.radius) tg.vx *= -1;
+          if (y < tg.radius || y > CANVAS_H - tg.radius) tg.vy *= -1;
+        } else if (tg.pattern === 'sine' && tg.cx !== undefined) {
+          const sp = tg.speed ?? 1;
+          x = tg.cx + Math.sin(t * sp) * 45 * tg.distance;
+          y = (tg.cy ?? 0) + Math.cos(t * sp * 0.8) * 28 * tg.distance;
+        } else if (tg.pattern === 'circular' && tg.cx !== undefined && tg.r) {
+          const sp = tg.speed ?? 1;
+          x = tg.cx + Math.cos(t * sp) * tg.r;
+          y = (tg.cy ?? 0) + Math.sin(t * sp) * tg.r;
+        }
+        return { ...tg, x, y, rotation };
+      });
+
+      state.projectiles = state.projectiles
+        .map(p => {
+          const np = { ...p };
+          np.x += np.vx;
+          np.y += np.vy;
+          np.vx += np.wind * 0.5;
+          np.vy += np.gravity;
+          np.life--;
+          return np;
+        })
+        .filter(p => p.life > 0 && p.x >= 0 && p.x <= CANVAS_W && p.y >= 0 && p.y <= CANVAS_H);
+
+      // Update hit markers
+      state.hitMarkers = state.hitMarkers.map(m => ({ ...m, life: m.life - 1 })).filter(m => m.life > 0);
+      
+      // Update miss splashes
+      state.missSplashes = state.missSplashes.map(splash => ({
+        ...splash,
+        life: splash.life - 1,
+        particles: splash.particles.map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          vx: p.vx * 0.95,
+          vy: p.vy * 0.95,
+          life: p.life - 1,
+        })).filter(p => p.life > 0),
+      })).filter(splash => splash.life > 0 && splash.particles.length > 0);
+
+      if (combo > 0 && Date.now() - lastHitTimeRef.current > COMBO_DECAY_MS) {
+        setCombo(0);
+      }
+
+      const hitTargets = new Set<number>();
+      const hitProjs = new Set<number>();
+      let hitCorrect = false;
+      
+      state.projectiles.forEach(proj => {
+        let hit = false;
+        state.targets.forEach(tg => {
+          const dx = proj.x - tg.x;
+          const dy = proj.y - tg.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < tg.radius + 6) {
+            hit = true;
+            hitTargets.add(tg.id);
+            hitProjs.add(proj.id);
+            const pts = tg.points + combo * 3;
+            setScore(s => s + pts);
+            setAccuracy(acc => ({ ...acc, hits: acc.hits + 1 }));
+            
+            // Add hit marker
+            state.hitMarkers.push({
+              id: nextId++,
+              x: tg.x,
+              y: tg.y,
+              life: 20,
+              correct: tg.correct ?? false,
+            });
+            
+            if (tg.correct) {
+              hitCorrect = true;
+              lastHitTimeRef.current = Date.now();
+              setCombo(c => c + 1);
+              setStreak(s => s + 1);
+            } else {
+              setCombo(0);
+              setStreak(0);
+            }
+          }
+        });
+        
+        // If projectile didn't hit a target and reached ground, create miss splash
+        if (!hit && proj.y >= CANVAS_H - 50 && proj.life < 5) {
+          const splash: MissSplash = {
+            id: nextId++,
+            x: proj.x,
+            y: CANVAS_H - 50,
+            life: 30,
+            particles: Array.from({ length: 8 }, () => ({
+              x: proj.x,
+              y: CANVAS_H - 50,
+              vx: (Math.random() - 0.5) * 3,
+              vy: -Math.random() * 2 - 1,
+              life: 20 + Math.random() * 10,
+            })),
+          };
+          state.missSplashes.push(splash);
+          hitProjs.add(proj.id);
+        }
+      });
+      
+      state.targets = state.targets.filter(t => !hitTargets.has(t.id));
+      state.projectiles = state.projectiles.filter(p => !hitProjs.has(p.id));
+      setTargets([...state.targets]);
+      setProjectiles([...state.projectiles]);
+      setHitMarkers([...state.hitMarkers]);
+      setMissSplashes([...state.missSplashes]);
+
+      if (state.targets.length === 0 && state.projectiles.length === 0 && !gameOver && !roundEndScheduledRef.current && !failRespawnScheduledRef.current) {
+        roundEndScheduledRef.current = true;
+        setTimeout(() => {
+          onRoundEnd?.(round, score);
+          setRound(r => r + 1);
+          setAmmo(MAX_AMMO);
+          setLevel(l => (round % ROUNDS_PER_LEVEL === 0 ? l + 1 : l));
+          roundEndScheduledRef.current = false;
+          spawnTargets();
+        }, 500);
+      } else if (ammoRef.current <= 0 && state.projectiles.length === 0 && state.targets.length > 0 && !failRespawnScheduledRef.current) {
+        failRespawnScheduledRef.current = true;
+        const correctStillUp = state.targets.some(t => t.correct);
+        if (correctStillUp) {
+          setLives(l => {
+            const next = Math.max(0, l - 1);
+            if (next <= 0) setGameOver(true);
+            return next;
+          });
+          setStreak(0);
+        }
+        state.targets = [];
+        setTargets([]);
+        setAmmo(MAX_AMMO);
+        setTimeout(() => {
+          failRespawnScheduledRef.current = false;
+          if (!gameOver) spawnTargets();
+        }, 600);
+      }
+
+      animRef.current = requestAnimationFrame(gameLoop);
+    };
+    animRef.current = requestAnimationFrame(gameLoop);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [spawnTargets, round, combo, gameOver, onRoundEnd]);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const state = stateRef.current;
+    const zoom = scopeZoom ? ZOOM_LEVELS[zoomLevel] : 1.0;
+
+    // Clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Draw sky gradient
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
+    if (envTheme === 'forest') {
+      skyGradient.addColorStop(0, env.sky);
+      skyGradient.addColorStop(1, env.horizon);
+    } else if (envTheme === 'desert') {
+      skyGradient.addColorStop(0, '#fef3c7');
+      skyGradient.addColorStop(1, '#fcd34d');
+    } else {
+      skyGradient.addColorStop(0, env.sky);
+      skyGradient.addColorStop(1, env.horizon);
+    }
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, CANVAS_W, HORIZON_Y);
+
+    // Draw horizon line
+    ctx.strokeStyle = env.horizon;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, HORIZON_Y);
+    ctx.lineTo(CANVAS_W, HORIZON_Y);
+    ctx.stroke();
+
+    // Draw environment elements
+    if (envTheme === 'forest') {
+      // Draw trees in background (smaller, further away)
+      for (let i = 0; i < 5; i++) {
+        const x = (i * CANVAS_W / 5) + (timeRef.current * 0.1) % (CANVAS_W / 5);
+        const treeHeight = 40 + Math.sin(i) * 10;
+        ctx.fillStyle = '#166534';
+        ctx.beginPath();
+        ctx.moveTo(x, HORIZON_Y);
+        ctx.lineTo(x - 15, HORIZON_Y - treeHeight);
+        ctx.lineTo(x + 15, HORIZON_Y - treeHeight);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else if (envTheme === 'desert') {
+      // Draw cacti
+      for (let i = 0; i < 4; i++) {
+        const x = (i * CANVAS_W / 4) + 50;
+        const cactusHeight = 30 + Math.sin(i) * 10;
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(x, HORIZON_Y - cactusHeight, 8, cactusHeight);
+        ctx.fillRect(x - 5, HORIZON_Y - cactusHeight * 0.6, 6, cactusHeight * 0.4);
+        ctx.fillRect(x + 8, HORIZON_Y - cactusHeight * 0.7, 6, cactusHeight * 0.3);
+      }
+      // Draw sand dunes
+      ctx.fillStyle = '#a16207';
+      ctx.beginPath();
+      ctx.moveTo(0, HORIZON_Y);
+      for (let i = 0; i < CANVAS_W; i += 20) {
+        ctx.lineTo(i, HORIZON_Y + Math.sin(i * 0.02 + timeRef.current * 0.01) * 5);
+      }
+      ctx.lineTo(CANVAS_W, HORIZON_Y);
+      ctx.closePath();
+      ctx.fill();
+    } else if (envTheme === 'arctic') {
+      // Draw aurora effect
+      const auroraGradient = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
+      auroraGradient.addColorStop(0, 'rgba(125, 211, 252, 0.3)');
+      auroraGradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.2)');
+      auroraGradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = auroraGradient;
+      ctx.fillRect(0, 0, CANVAS_W, HORIZON_Y);
+      
+      // Draw ice formations
+      for (let i = 0; i < 3; i++) {
+        const x = (i * CANVAS_W / 3) + 100;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.moveTo(x, HORIZON_Y);
+        ctx.lineTo(x - 20, HORIZON_Y - 25);
+        ctx.lineTo(x, HORIZON_Y - 35);
+        ctx.lineTo(x + 20, HORIZON_Y - 25);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Draw environment particles
+    envParticles.forEach(p => {
+      if (p.type === 'snowflake') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'bird') {
+        ctx.fillStyle = '#1e4620';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'shimmer') {
+        ctx.fillStyle = `rgba(252, 211, 77, ${0.3 * (p.life / 100)})`;
+        ctx.fillRect(p.x - 10, p.y - 2, 20, 4);
+      }
+    });
+
+    // Draw ground with 3D perspective (trapezoid)
+    const groundGradient = ctx.createLinearGradient(0, HORIZON_Y, 0, CANVAS_H);
+    groundGradient.addColorStop(0, env.ground);
+    groundGradient.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = groundGradient;
+    ctx.beginPath();
+    ctx.moveTo(0, HORIZON_Y);
+    ctx.lineTo(0, CANVAS_H);
+    ctx.lineTo(CANVAS_W, CANVAS_H);
+    ctx.lineTo(CANVAS_W, HORIZON_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw perspective grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = HORIZON_Y + (i * (CANVAS_H - HORIZON_Y) / 5);
+      const width = CANVAS_W * (1 - (y - HORIZON_Y) / (CANVAS_H - HORIZON_Y) * 0.3);
+      ctx.beginPath();
+      ctx.moveTo((CANVAS_W - width) / 2, y);
+      ctx.lineTo((CANVAS_W + width) / 2, y);
+      ctx.stroke();
+    }
+
+    // Draw targets with 3D scaling
+    state.targets.forEach(tg => {
+      const config = TARGET_TYPE_CONFIG[tg.type];
+      const scaledRadius = tg.radius;
+      
+      ctx.save();
+      ctx.translate(tg.x, tg.y);
+      if (tg.type === 'bonus') {
+        ctx.rotate(tg.rotation);
+      }
+      
+      // Draw target circle
+      ctx.fillStyle = tg.correct ? config.color : '#94a3b8';
+      ctx.strokeStyle = config.strokeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, scaledRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Draw target type indicator
+      if (tg.type === 'bonus') {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, scaledRadius * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (tg.type === 'fast') {
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.moveTo(0, -scaledRadius * 0.5);
+        ctx.lineTo(-scaledRadius * 0.3, scaledRadius * 0.3);
+        ctx.lineTo(scaledRadius * 0.3, scaledRadius * 0.3);
+        ctx.closePath();
+        ctx.fill();
+      } else if (tg.type === 'heavy') {
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-scaledRadius * 0.4, -scaledRadius * 0.4, scaledRadius * 0.8, scaledRadius * 0.8);
+      }
+      
+      ctx.restore();
+      
+      // Draw answer text
+      ctx.fillStyle = '#0f172a';
+      ctx.font = `${Math.max(10, 12 * tg.distance)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(tg.answer.slice(0, 10), tg.x, tg.y + 4);
+    });
+
+    // Draw projectiles
+    state.projectiles.forEach(p => {
+      ctx.fillStyle = '#f87171';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Draw miss splashes
+    state.missSplashes.forEach(splash => {
+      splash.particles.forEach(particle => {
+        ctx.fillStyle = `rgba(139, 69, 19, ${particle.life / 30})`;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    });
+
+    // Draw hit markers
+    state.hitMarkers.forEach(marker => {
+      const alpha = marker.life / 20;
+      ctx.strokeStyle = marker.correct ? `rgba(34, 197, 94, ${alpha})` : `rgba(239, 68, 68, ${alpha})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(marker.x, marker.y, 15 + (20 - marker.life), 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // Draw crosshair
+    ctx.strokeStyle = 'rgba(30,41,59,0.95)';
+    ctx.lineWidth = 2;
+    const crossSize = scopeZoom ? 24 * zoom : 14;
+    ctx.beginPath();
+    ctx.moveTo(mouse.x - crossSize, mouse.y);
+    ctx.lineTo(mouse.x + crossSize, mouse.y);
+    ctx.moveTo(mouse.x, mouse.y - crossSize);
+    ctx.lineTo(mouse.x, mouse.y + crossSize);
+    ctx.stroke();
+
+    // Draw scope overlay when zooming
+    if (scopeZoom) {
+      ctx.strokeStyle = 'rgba(30,41,59,0.6)';
+      ctx.lineWidth = 1;
+      // Outer circle
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 55 * zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      // Middle circle
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 35 * zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      // Inner circle
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 20 * zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      // Crosshair lines
+      ctx.strokeStyle = 'rgba(30,41,59,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mouse.x - 30 * zoom, mouse.y);
+      ctx.lineTo(mouse.x - 15 * zoom, mouse.y);
+      ctx.moveTo(mouse.x + 15 * zoom, mouse.y);
+      ctx.lineTo(mouse.x + 30 * zoom, mouse.y);
+      ctx.moveTo(mouse.x, mouse.y - 30 * zoom);
+      ctx.lineTo(mouse.x, mouse.y - 15 * zoom);
+      ctx.moveTo(mouse.x, mouse.y + 15 * zoom);
+      ctx.lineTo(mouse.x, mouse.y + 30 * zoom);
+      ctx.stroke();
+    }
+  }, [mouse, scopeZoom, zoomLevel, env, envTheme, envParticles]);
+
+  useEffect(() => {
+    const id = setInterval(draw, 1000 / 60);
+    return () => clearInterval(id);
+  }, [draw]);
+
+  useEffect(() => {
+    if (targets.length === 0 && question && ammo <= 0) {
+      setLevel(l => l + 1);
+      setAmmo(MAX_AMMO);
+      setQuestion(null);
+    }
+  }, [targets.length, question, ammo]);
+
+  const accPct = accuracy.shots > 0 ? Math.round((accuracy.hits / accuracy.shots) * 100) : 0;
+
+  if (gameOver || lives <= 0) {
+    return (
+      <div className="game-card overflow-hidden bg-white border border-gray-200 p-8">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🎯</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Game Over</h2>
+          <p className="text-lg text-gray-600 mb-2">Final Score: {score}</p>
+          <p className="text-sm text-gray-500 mb-2">Rounds completed: {round - 1}</p>
+          <p className="text-sm text-gray-500 mb-6">Final Accuracy: {accPct}%</p>
+          <button onClick={onClose} className="btn-elite btn-elite-primary">
+            Exit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="game-card overflow-hidden bg-white border border-gray-200">
+      <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-4 text-gray-800 text-sm font-medium">
+          <span>Score: {score}</span>
+          <span>Round {round}</span>
+          <span>Level {level}</span>
+          <span className={combo >= 2 ? 'text-amber-600 font-bold' : ''}>Combo: {combo}x</span>
+          <span className={streak >= 3 ? 'text-green-600 font-bold' : ''}>Streak: {streak}</span>
+          <span>Accuracy: {accPct}%</span>
+          <span>Ammo: {ammo}</span>
+          <span className="text-red-500">❤️ {lives}</span>
+        </div>
+        <button onClick={onClose} className="btn-elite btn-elite-ghost text-sm">
+          Exit
+        </button>
+      </div>
+
+      <div className="flex items-center justify-center gap-2 py-2 bg-amber-50 border-b border-amber-100">
+        <span className="text-sm text-amber-800 font-medium">Wind:</span>
+        <div className="flex items-center gap-1" title={`Wind: ${wind > 0 ? '→' : '←'} ${(Math.abs(wind) * 100).toFixed(0)}%`}>
+          <svg 
+            width="24" 
+            height="24" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            className={wind < 0 ? 'rotate-180' : ''} 
+            style={{ 
+              opacity: 0.5 + Math.min(Math.abs(wind) * 8, 0.5),
+              transform: `translateX(${Math.sin(windAnimation) * 3}px)`,
+              transition: 'transform 0.1s ease-out',
+            }}
+          >
+            <path d="M4 12h16M12 4v16m0-16l-4 4m4-4l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-xs text-amber-700">{wind > 0 ? '→' : '←'} {Math.abs(wind * 100).toFixed(0)}%</span>
+        </div>
+        {scopeZoom && (
+          <span className="text-xs text-amber-700 ml-4">Zoom: {ZOOM_LEVELS[zoomLevel].toFixed(1)}x</span>
+        )}
+      </div>
+
+      <div className="relative">
+        <div className="absolute top-0 left-0 right-0 z-10 p-3 bg-white/95 border-b border-gray-200 text-gray-800 text-center font-semibold shadow-sm">
+          {question?.question}
+        </div>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_W}
+          height={CANVAS_H}
+          className="block w-full max-w-full cursor-crosshair"
+          onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => setScopeZoom(false)}
+        />
+      </div>
+      <p className="p-2 text-center text-xs text-gray-500 bg-gray-50">
+        Hold click to zoom scope, release to fire. Wind and gravity affect shots. Hit the correct answer! 
+        Target types: 🟢 Standard, 🔵 Fast, 🔴 Heavy, 🟡 Bonus (spinning)
+      </p>
+    </div>
+  );
+}

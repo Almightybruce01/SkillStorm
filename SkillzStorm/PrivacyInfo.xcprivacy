@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PrivacyInfo.xcprivacy — App Privacy Manifest
+  
+  Apple REQUIRES this file for App Store submission.
+  It declares what data your app collects and what APIs it uses.
+  
+  Since SkillzStorm collects NO personal data and uses no tracking,
+  this is a very clean manifest.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Privacy Tracking: We do NOT track users -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	
+	<!-- Tracking Domains: None -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	
+	<!-- Data Collection: Minimal -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- Only diagnostic/crash data (from Apple, not us) -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- Required Reason APIs we use -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- UserDefaults (for local game progress) -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,1164 @@
+/* ═══════════════════════════════════════════════════════════
+   ZOMBIE DEFENSE ENGINE
+   Tower defense educational game for SkillzStorm
+   Used by Math Defense, Cell Defender, Ecosystem Builder, etc.
+   ═══════════════════════════════════════════════════════════ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Grade, Question } from '../questionBank';
+import { getQuestions } from '../questionBank';
+import { playSound } from '../SoundEngine';
+import { getGameById } from '../../engine/gameData';
+
+const CANVAS_W = 512;
+const CANVAS_H = 384;
+const CELL = 32;
+const COLS = Math.floor(CANVAS_W / CELL);
+const ROWS = Math.floor(CANVAS_H / CELL);
+const PATH: [number, number][] = [
+  [0, 1], [1, 1], [2, 1], [2, 2], [2, 3], [3, 3], [4, 3], [4, 2], [4, 1], [5, 1],
+  [6, 1], [6, 2], [6, 3], [7, 3], [8, 3], [9, 3], [10, 3], [11, 3], [12, 3], [13, 3], [14, 3], [15, 3],
+];
+const SPAWN = PATH[0];
+const BASE_HP_MAX = 20;
+
+type ZombieType = 'regular' | 'fast' | 'tank' | 'boss';
+type TowerType = 'cannon' | 'freeze' | 'fire' | 'sniper';
+
+const ZOMBIE_CONFIG: Record<ZombieType, { hp: number; speed: number; color: string; coinReward: number }> = {
+  regular: { hp: 3, speed: 1, color: '#22c55e', coinReward: 2 },
+  fast: { hp: 2, speed: 2, color: '#86efac', coinReward: 3 },
+  tank: { hp: 5, speed: 0.5, color: '#a855f7', coinReward: 5 },
+  boss: { hp: 15, speed: 0.4, color: '#ef4444', coinReward: 25 },
+};
+
+const TOWER_BASE: Record<TowerType, { cost: number; color: string; damage: number; range: number; cooldown: number }> = {
+  cannon: { cost: 30, color: '#3b82f6', damage: 4, range: 1.5, cooldown: 22 },
+  freeze: { cost: 45, color: '#06b6d4', damage: 2, range: 1.8, cooldown: 30 },
+  fire: { cost: 50, color: '#f97316', damage: 6, range: 1.5, cooldown: 35 },
+  sniper: { cost: 60, color: '#22c55e', damage: 12, range: 3.5, cooldown: 50 },
+};
+
+const UPGRADE_MULT = { damage: 1.5, range: 1.2 };
+
+const ZOMBIE_LEGEND: Record<ZombieType, string> = {
+  regular: 'Green (2 coins)',
+  fast: 'Light green (3 coins)',
+  tank: 'Purple (5 coins)',
+  boss: 'Red (25 coins)',
+};
+
+const TOWER_INFO: Record<TowerType, { icon: string; label: string; desc: string }> = {
+  cannon: { icon: '🎯', label: 'Cannon', desc: '4 dmg, 1.5 cells' },
+  freeze: { icon: '❄️', label: 'Freeze', desc: 'Slows, 1.8 cells' },
+  fire: { icon: '🔥', label: 'Fire', desc: '6 dmg, 1.5 cells' },
+  sniper: { icon: '🎯', label: 'Sniper', desc: '12 dmg, 3.5 cells' },
+};
+
+interface Zombie {
+  id: number;
+  type: ZombieType;
+  pathIndex: number;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  slowUntil?: number;
+}
+
+interface Tower {
+  id: number;
+  type: TowerType;
+  col: number;
+  row: number;
+  level: number;
+  targetId: number | null;
+  cooldown: number;
+}
+
+interface Projectile {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  progress: number;
+  towerType: TowerType;
+  targetId: number;
+  damage: number;
+}
+
+interface Particle {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+  vx?: number;
+  vy?: number;
+}
+
+
+interface DamageNumber {
+  id: number;
+  x: number;
+  y: number;
+  value: number;
+  life: number;
+}
+
+let zombieIdNext = 1;
+let towerIdNext = 1;
+
+function getSubjectForGame(gameId: string): 'math' | 'science' | 'vocabulary' {
+  const game = getGameById(gameId);
+  if (!game) return 'math';
+  const s = game.subject;
+  if (s === 'math') return 'math';
+  if (s === 'science') return 'science';
+  return 'vocabulary';
+}
+
+interface Props {
+  gameId: string;
+  grade: Grade;
+  onClose: () => void;
+  onRoundEnd?: (round: number, score: number) => void;
+}
+
+export function ZombieDefense({ gameId, grade, onClose, onRoundEnd }: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const subject = getSubjectForGame(gameId);
+
+  const [wave, setWave] = useState(0);
+  const [coins, setCoins] = useState(100);
+  const [score, setScore] = useState(0);
+  const [baseHp, setBaseHp] = useState(BASE_HP_MAX);
+  const [gameOver, setGameOver] = useState(false);
+  const [victory, setVictory] = useState(false);
+  const [placingTower, setPlacingTower] = useState<TowerType | null>(null);
+  const [upgradeTarget, setUpgradeTarget] = useState<Tower | null>(null);
+  const [questionModal, setQuestionModal] = useState<{ question: Question; col: number; row: number; type: TowerType } | null>(null);
+  const [waveCleared, setWaveCleared] = useState(false);
+  const [knowledgeGateModal, setKnowledgeGateModal] = useState<Question | null>(null);
+  const [previewCell, setPreviewCell] = useState<{ col: number; row: number } | null>(null);
+  const [waveAnnouncement, setWaveAnnouncement] = useState<number | null>(null);
+  const [screenShake, setScreenShake] = useState(0);
+  const [tapDamageCooldown, setTapDamageCooldown] = useState(0);
+  const [fastForward, setFastForward] = useState(false);
+  const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
+  const [gameStats, setGameStats] = useState({ towersBuilt: 0, zombiesKilled: 0 });
+  const [waveProgress, setWaveProgress] = useState<{ total: number; remaining: number } | null>(null);
+  const damageNumberIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!stateRef.current.waveActive && wave === 0) {
+      setWaveProgress(null);
+      return;
+    }
+    const id = setInterval(() => {
+      const s = stateRef.current;
+      if (!s.waveActive) {
+        setWaveProgress(null);
+        return;
+      }
+      const isBoss = wave > 0 && wave % 5 === 0;
+      const total = isBoss ? 1 : Math.min(4 + wave * 2, 18);
+      setWaveProgress({ total, remaining: s.zombies.length });
+    }, 150);
+    return () => clearInterval(id);
+  }, [wave]);
+
+  useEffect(() => {
+    if (damageNumbers.length === 0) return;
+    const id = setInterval(() => {
+      setDamageNumbers((prev) =>
+        prev
+          .map((d) => ({ ...d, life: d.life - 0.03, y: d.y - 1.5 }))
+          .filter((d) => d.life > 0)
+      );
+    }, 30);
+    return () => clearInterval(id);
+  }, [damageNumbers.length]);
+  const [questionPool] = useState(() => {
+    const m = getQuestions(grade, 'math', subject === 'math' ? 25 : 10);
+    const s = getQuestions(grade, 'science', subject === 'science' ? 25 : 10);
+    const v = getQuestions(grade, 'vocabulary', subject === 'vocabulary' ? 25 : 10);
+    const all = [...m, ...s, ...v];
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
+    }
+    return all;
+  });
+  const questionIdx = useRef(0);
+  const frameRef = useRef(0);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  const stateRef = useRef({
+    zombies: [] as Zombie[],
+    towers: [] as Tower[],
+    projectiles: [] as Projectile[],
+    particles: [] as Particle[],
+    waveActive: false,
+    waveSpawnCount: 0,
+    waveSpawnTimer: 0,
+  });
+
+  const pathCells = useRef<Set<string>>(new Set(PATH.map(([c, r]) => `${c},${r}`)));
+  const isPath = useCallback((col: number, row: number) => pathCells.current.has(`${col},${row}`), []);
+  const scoreRef = useRef(0);
+  scoreRef.current = score;
+  const onRoundEndRef = useRef(onRoundEnd);
+  onRoundEndRef.current = onRoundEnd;
+
+  const getNextQuestion = useCallback((): Question => {
+    const pool = questionPool;
+    const idx = questionIdx.current % pool.length;
+    questionIdx.current++;
+    return pool[idx] ?? pool[0];
+  }, [questionPool]);
+
+  const startWave = useCallback(() => {
+    setWave((w) => {
+      const next = w + 1;
+      setWaveAnnouncement(next);
+      setTimeout(() => setWaveAnnouncement(null), 2000);
+      return next;
+    });
+    stateRef.current.waveActive = true;
+    stateRef.current.waveSpawnCount = 0;
+    stateRef.current.waveSpawnTimer = 0;
+    setWaveCleared(false);
+    setKnowledgeGateModal(null);
+    playSound('wave');
+  }, []);
+
+  const getZombieTypeForWave = useCallback((waveNum: number): ZombieType => {
+    const isBossWave = waveNum > 0 && waveNum % 5 === 0;
+    if (isBossWave) return 'boss';
+    const r = Math.random();
+    if (r < 0.5) return 'regular';
+    if (r < 0.75) return 'fast';
+    return 'tank';
+  }, []);
+
+  const spawnZombie = useCallback((waveNum: number) => {
+    const type = getZombieTypeForWave(waveNum);
+    const cfg = ZOMBIE_CONFIG[type];
+    stateRef.current.zombies.push({
+      id: zombieIdNext++,
+      type,
+      pathIndex: 0,
+      x: SPAWN[0] * CELL + CELL / 2,
+      y: SPAWN[1] * CELL + CELL / 2,
+      hp: cfg.hp,
+      maxHp: cfg.hp,
+    });
+  }, [getZombieTypeForWave]);
+
+  const getTowerStats = useCallback((t: Tower) => {
+    const base = TOWER_BASE[t.type];
+    return {
+      damage: Math.floor(base.damage * Math.pow(UPGRADE_MULT.damage, t.level - 1)),
+      range: base.range * CELL * Math.pow(UPGRADE_MULT.range, t.level - 1),
+      cooldown: base.cooldown,
+    };
+  }, []);
+
+  const getUpgradeCost = useCallback((t: Tower): number => {
+    if (t.level >= 3) return 0;
+    const base = TOWER_BASE[t.type];
+    return Math.floor(base.cost * 0.6 * t.level);
+  }, []);
+
+  const answerQuestion = useCallback((choiceIndex: number, col: number, row: number, type: TowerType) => {
+    const q = questionModal?.question;
+    if (!q) return;
+    const correct = q.correct === choiceIndex;
+    setQuestionModal(null);
+    if (correct) {
+      playSound('correct');
+      placeTowerAt(col, row, type);
+    } else {
+      playSound('wrong');
+      const cost = TOWER_BASE[type].cost * 2;
+      setCoins((c) => {
+        if (c >= cost) {
+          placeTowerAt(col, row, type);
+          return c - cost;
+        }
+        return c;
+      });
+    }
+  }, [questionModal]);
+
+  const placeTowerAt = useCallback((col: number, row: number, type: TowerType) => {
+    const state = stateRef.current;
+    const existing = state.towers.some((t) => t.col === col && t.row === row);
+    if (existing) return;
+    state.towers.push({
+      id: towerIdNext++,
+      type,
+      col,
+      row,
+      level: 1,
+      targetId: null,
+      cooldown: 0,
+    });
+    setGameStats((s) => ({ ...s, towersBuilt: s.towersBuilt + 1 }));
+    playSound('place');
+    setPlacingTower(null);
+    setPreviewCell(null);
+  }, []);
+
+  const tryPlaceTower = useCallback((col: number, row: number, type: TowerType) => {
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
+    if (isPath(col, row)) return;
+    const state = stateRef.current;
+    const existing = state.towers.some((t) => t.col === col && t.row === row);
+    if (existing) return;
+
+    const baseCost = TOWER_BASE[type].cost;
+    if (coins >= baseCost) {
+      setQuestionModal({ question: getNextQuestion(), col, row, type });
+    }
+  }, [isPath, coins, getNextQuestion]);
+
+  const getSellValue = useCallback((t: Tower): number => {
+    const base = TOWER_BASE[t.type];
+    let totalCost = base.cost;
+    for (let l = 1; l < t.level; l++) {
+      totalCost += Math.floor(base.cost * 0.6 * l);
+    }
+    return Math.floor(totalCost * 0.5);
+  }, []);
+
+  const sellTower = useCallback((t: Tower) => {
+    const refund = getSellValue(t);
+    setCoins((c) => c + refund);
+    const state = stateRef.current;
+    state.towers = state.towers.filter((x) => x.id !== t.id);
+    setUpgradeTarget(null);
+    playSound('place');
+  }, [getSellValue]);
+
+  const upgradeTower = useCallback((t: Tower) => {
+    if (t.level >= 3) return;
+    const cost = getUpgradeCost(t);
+    setCoins((c) => {
+      if (c >= cost) {
+        const state = stateRef.current;
+        const idx = state.towers.findIndex((x) => x.id === t.id);
+        if (idx >= 0) state.towers[idx].level++;
+        setUpgradeTarget(null);
+        playSound('place');
+        return c - cost;
+      }
+      return c;
+    });
+  }, [getUpgradeCost]);
+
+  const answerKnowledgeGate = useCallback((choiceIndex: number) => {
+    const q = knowledgeGateModal;
+    if (!q) return;
+    const correct = q.correct === choiceIndex;
+    setKnowledgeGateModal(null);
+    if (correct) {
+      playSound('correct');
+      startWave();
+    } else {
+      playSound('wrong');
+      startWave();
+    }
+  }, [knowledgeGateModal, startWave]);
+
+  useEffect(() => {
+    let animId = 0;
+    const tick = () => {
+      const state = stateRef.current;
+      frameRef.current++;
+      const ctx = canvasRef.current?.getContext('2d');
+      if (!ctx) {
+        animId = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (gameOver || victory || questionModal) {
+        animId = requestAnimationFrame(tick);
+        return;
+      }
+
+      const waveNum = wave;
+      const isBossWave = waveNum > 0 && waveNum % 5 === 0;
+      const zombiesPerWave = isBossWave ? 1 : Math.min(4 + waveNum * 2, 18);
+      const spawnInterval = isBossWave ? 120 : Math.max(20, 50 - waveNum * 2);
+
+      if (state.waveActive) {
+        state.waveSpawnTimer += fastForward ? 2 : 1;
+        if (state.waveSpawnTimer >= spawnInterval && state.waveSpawnCount < zombiesPerWave) {
+          state.waveSpawnTimer = 0;
+          state.waveSpawnCount++;
+          spawnZombie(waveNum);
+        }
+        if (state.zombies.length === 0 && state.waveSpawnCount >= zombiesPerWave) {
+          state.waveActive = false;
+          setWaveCleared(true);
+          const bonus = 20 + waveNum * 5;
+          setCoins((c) => c + bonus);
+          setScore((s) => s + bonus + waveNum * 10);
+          onRoundEndRef.current?.(waveNum, scoreRef.current + bonus + waveNum * 10);
+          playSound('wave_clear');
+          if (waveNum >= 10) {
+            setVictory(true);
+          } else {
+            setKnowledgeGateModal(getNextQuestion());
+          }
+        }
+      }
+
+      const speedMult = fastForward ? 2 : 1;
+      for (const z of state.zombies) {
+        const cfg = ZOMBIE_CONFIG[z.type];
+        let speed = cfg.speed * 0.03 * speedMult;
+        if (z.slowUntil !== undefined && frameRef.current < z.slowUntil) speed *= 0.4;
+        z.pathIndex += speed;
+        const idx = Math.min(Math.floor(z.pathIndex), PATH.length - 1);
+        const [nc, nr] = PATH[Math.min(idx, PATH.length - 1)];
+        z.x = nc * CELL + CELL / 2;
+        z.y = nr * CELL + CELL / 2;
+        if (idx >= PATH.length - 1) {
+          setScreenShake(1);
+          setTimeout(() => setScreenShake(0), 400);
+          setBaseHp((h) => {
+            const next = h - 1;
+            if (next <= 0) setGameOver(true);
+            return Math.max(0, next);
+          });
+          state.zombies = state.zombies.filter((x) => x.id !== z.id);
+          playSound('leak');
+        }
+      }
+
+      for (const t of state.towers) {
+        t.cooldown = Math.max(0, t.cooldown - 1);
+        const stats = getTowerStats(t);
+        const tx = t.col * CELL + CELL / 2;
+        const ty = t.row * CELL + CELL / 2;
+        let best: Zombie | null = null;
+        let bestD = stats.range + 1;
+        for (const z of state.zombies) {
+          const d = Math.hypot(z.x - tx, z.y - ty);
+          if (d <= stats.range && d < bestD) {
+            bestD = d;
+            best = z;
+          }
+        }
+        t.targetId = best?.id ?? null;
+        if (best && t.cooldown <= 0) {
+          const base = TOWER_BASE[t.type];
+          t.cooldown = base.cooldown;
+          state.projectiles.push({
+            fromX: tx,
+            fromY: ty,
+            toX: best.x,
+            toY: best.y,
+            progress: 0,
+            towerType: t.type,
+            targetId: best.id,
+            damage: stats.damage,
+          });
+          if (t.type === 'freeze' && best) {
+            best.slowUntil = frameRef.current + 45;
+          }
+        }
+      }
+
+      for (const p of state.projectiles) {
+        p.progress += fastForward ? 0.24 : 0.12;
+        if (p.progress >= 1) {
+          const z = state.zombies.find((z) => z.id === p.targetId);
+          if (z) {
+            z.hp -= p.damage;
+            setDamageNumbers((prev) => [...prev, { id: damageNumberIdRef.current++, x: z.x, y: z.y, value: p.damage, life: 1 }]);
+          }
+          const toRemove = state.zombies.filter((z) => z.hp <= 0);
+          for (const dead of toRemove) {
+            const zcfg = ZOMBIE_CONFIG[dead.type];
+            const isBoss = dead.type === 'boss';
+            setCoins((c) => c + zcfg.coinReward);
+            setScore((s) => s + zcfg.coinReward);
+            const particleCount = isBoss ? 24 : 12;
+            const maxLife = isBoss ? 18 : 14;
+            const speed = isBoss ? 2 : 1.2;
+            for (let i = 0; i < particleCount; i++) {
+              const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.5;
+              const v = speed * (0.8 + Math.random() * 0.4);
+              state.particles.push({
+                x: dead.x,
+                y: dead.y,
+                life: maxLife,
+                maxLife,
+                color: isBoss ? (i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#fca5a5' : '#dc2626') : zcfg.color,
+                size: isBoss ? 6 + Math.random() * 8 : 4 + Math.random() * 4,
+                vx: Math.cos(angle) * v,
+                vy: Math.sin(angle) * v,
+              });
+            }
+            if (isBoss) {
+              setScreenShake(1);
+              setTimeout(() => setScreenShake(0), 400);
+            }
+            playSound('kill');
+            setGameStats((s) => ({ ...s, zombiesKilled: s.zombiesKilled + 1 }));
+          }
+          state.zombies = state.zombies.filter((x) => x.hp > 0);
+          state.projectiles = state.projectiles.filter((x) => x !== p);
+        }
+      }
+      for (const p of state.particles) {
+        p.life -= 1;
+        if (p.vx !== undefined) { p.x += p.vx; p.vx *= 0.92; }
+        if (p.vy !== undefined) { p.y += p.vy; p.vy *= 0.92; }
+      }
+      state.particles = state.particles.filter((p) => p.life > 0);
+
+      animId = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(animId);
+  }, [gameOver, victory, wave, questionModal, spawnZombie, getTowerStats, getNextQuestion, fastForward]);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const state = stateRef.current;
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < ROWS; r++) {
+        ctx.fillStyle = isPath(c, r) ? '#e2e8f0' : '#f1f5f9';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+        ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
+      }
+    }
+
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    for (let i = 0; i < PATH.length - 1; i++) {
+      const [c, r] = PATH[i];
+      const x = c * CELL + CELL / 2;
+      const y = r * CELL + CELL / 2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    for (const t of state.towers) {
+      const cfg = TOWER_BASE[t.type];
+      ctx.fillStyle = cfg.color;
+      const pad = 2 + t.level;
+      ctx.fillRect(t.col * CELL + pad, t.row * CELL + pad, CELL - pad * 2, CELL - pad * 2);
+      ctx.strokeStyle = t.level >= 3 ? '#f59e0b' : '#64748b';
+      ctx.lineWidth = t.level >= 3 ? 2 : 1;
+      ctx.strokeRect(t.col * CELL + pad, t.row * CELL + pad, CELL - pad * 2, CELL - pad * 2);
+      if (t.level > 1) {
+        ctx.fillStyle = '#1e293b';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`L${t.level}`, t.col * CELL + CELL / 2, t.row * CELL + CELL - 4);
+      }
+    }
+
+    for (const p of state.projectiles) {
+      const x = p.fromX + (p.toX - p.fromX) * p.progress;
+      const y = p.fromY + (p.toY - p.fromY) * p.progress;
+      const cfg = TOWER_BASE[p.towerType];
+      if (p.progress < 0.2) {
+        ctx.strokeStyle = cfg.color;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 1 - p.progress * 3;
+        ctx.beginPath();
+        ctx.moveTo(p.fromX, p.fromY);
+        ctx.lineTo(p.toX, p.toY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    for (const z of state.zombies) {
+      const cfg = ZOMBIE_CONFIG[z.type];
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath();
+      ctx.arc(z.x, z.y, z.type === 'boss' ? 16 : 12, 0, Math.PI * 2);
+      ctx.fill();
+      if (z.type === 'boss') {
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        const pulse = 0.8 + 0.2 * Math.sin(frameRef.current * 0.2);
+        ctx.globalAlpha = pulse;
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      const barW = 24;
+      const barH = 3;
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(z.x - barW / 2, z.y - 20, barW, barH);
+      ctx.fillStyle = z.hp > z.maxHp / 2 ? '#22c55e' : '#ef4444';
+      ctx.fillRect(z.x - barW / 2, z.y - 20, barW * (z.hp / z.maxHp), barH);
+    }
+
+    for (const p of state.particles) {
+      ctx.globalAlpha = Math.min(1, p.life / (p.maxLife ?? 12));
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    for (const d of damageNumbers) {
+      ctx.globalAlpha = Math.min(1, d.life);
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`-${d.value}`, d.x, d.y - 25);
+      ctx.strokeText(`-${d.value}`, d.x, d.y - 25);
+      ctx.globalAlpha = 1;
+    }
+
+    if (placingTower) {
+      const cfg = TOWER_BASE[placingTower];
+      const rangePx = cfg.range * CELL;
+      const cx = previewCell ? previewCell.col * CELL + CELL / 2 : CANVAS_W / 2;
+      const cy = previewCell ? previewCell.row * CELL + CELL / 2 : CANVAS_H / 2;
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rangePx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = cfg.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (previewCell) {
+        const canPlace = previewCell.col >= 0 && previewCell.col < COLS && previewCell.row >= 0 && previewCell.row < ROWS
+          && !isPath(previewCell.col, previewCell.row)
+          && !state.towers.some((t) => t.col === previewCell!.col && t.row === previewCell!.row);
+        ctx.globalAlpha = canPlace ? 0.5 : 0.3;
+        ctx.fillStyle = canPlace ? cfg.color : '#ef4444';
+        ctx.fillRect(previewCell.col * CELL + 4, previewCell.row * CELL + 4, CELL - 8, CELL - 8);
+        ctx.strokeStyle = canPlace ? cfg.color : '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(previewCell.col * CELL + 4, previewCell.row * CELL + 4, CELL - 8, CELL - 8);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    const [bc, br] = PATH[PATH.length - 1];
+    const bx = bc * CELL + CELL / 2;
+    const by = br * CELL + CELL / 2;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(bx - 14, by - 14, 28, 28);
+    ctx.strokeStyle = '#7f1d1d';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx - 14, by - 14, 28, 28);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('BASE', bx, by + 4);
+  }, [isPath, placingTower, previewCell, upgradeTarget, getTowerStats]);
+
+  useEffect(() => {
+    const id = setInterval(draw, 1000 / 60);
+    return () => clearInterval(id);
+  }, [draw]);
+
+  const getCanvasCoords = useCallback((clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { col: -1, row: -1, x: 0, y: 0 };
+    const scaleX = rect.width / CANVAS_W;
+    const scaleY = rect.height / CANVAS_H;
+    const canvasX = (clientX - rect.left) / scaleX;
+    const canvasY = (clientY - rect.top) / scaleY;
+    return {
+      col: Math.floor(canvasX / CELL),
+      row: Math.floor(canvasY / CELL),
+      x: canvasX,
+      y: canvasY,
+    };
+  }, []);
+
+  const handleCanvasPointer = useCallback((clientX: number, clientY: number) => {
+    const { col, row, x, y } = getCanvasCoords(clientX, clientY);
+    if (col < 0 || row < 0) return;
+
+    if (upgradeTarget) {
+      setUpgradeTarget(null);
+      return;
+    }
+
+    const state = stateRef.current;
+    const towerAt = state.towers.find((t) => t.col === col && t.row === row);
+    if (towerAt) {
+      setUpgradeTarget(towerAt);
+      return;
+    }
+
+    const zombieAt = state.zombies.find((z) => {
+      const radius = z.type === 'boss' ? 20 : 16;
+      return Math.hypot(z.x - (col * CELL + CELL / 2), z.y - (row * CELL + CELL / 2)) <= radius;
+    });
+    if (zombieAt && tapDamageCooldown <= 0) {
+      zombieAt.hp -= 1;
+      setTapDamageCooldown(30);
+      if (zombieAt.hp <= 0) {
+        const zcfg = ZOMBIE_CONFIG[zombieAt.type];
+        setCoins((c) => c + zcfg.coinReward);
+        setScore((s) => s + zcfg.coinReward);
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 * i) / 8 + Math.random();
+          const v = 1.5 * (0.8 + Math.random() * 0.4);
+          state.particles.push({
+            x: zombieAt.x,
+            y: zombieAt.y,
+            life: 12,
+            maxLife: 12,
+            color: zcfg.color,
+            size: 4 + Math.random() * 4,
+            vx: Math.cos(angle) * v,
+            vy: Math.sin(angle) * v,
+          });
+        }
+        if (zombieAt.type === 'boss') {
+          setScreenShake(1);
+          setTimeout(() => setScreenShake(0), 400);
+        }
+        state.zombies = state.zombies.filter((z) => z.hp > 0);
+        playSound('kill');
+      }
+      return;
+    }
+
+    if (placingTower) {
+      tryPlaceTower(col, row, placingTower);
+    }
+  }, [placingTower, tryPlaceTower, upgradeTarget, tapDamageCooldown, getCanvasCoords]);
+
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    handleCanvasPointer(e.clientX, e.clientY);
+  }, [handleCanvasPointer]);
+
+  const handleCanvasTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.changedTouches?.[0];
+    if (t) handleCanvasPointer(t.clientX, t.clientY);
+  }, [handleCanvasPointer]);
+
+  const handleCanvasMove = useCallback((clientX: number, clientY: number) => {
+    const { col, row } = getCanvasCoords(clientX, clientY);
+    if (placingTower && col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+      setPreviewCell({ col, row });
+    } else {
+      setPreviewCell(null);
+    }
+  }, [placingTower, getCanvasCoords]);
+
+  const handleCanvasTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.touches?.[0];
+    if (t) handleCanvasMove(t.clientX, t.clientY);
+  }, [handleCanvasMove]);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    handleCanvasMove(e.clientX, e.clientY);
+  }, [handleCanvasMove]);
+
+  const handleCanvasTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.touches?.[0];
+    if (t) handleCanvasMove(t.clientX, t.clientY);
+  }, [handleCanvasMove]);
+
+  const handleCanvasMouseLeave = useCallback(() => setPreviewCell(null), []);
+
+  useEffect(() => {
+    if (tapDamageCooldown <= 0) return;
+    const id = setInterval(() => setTapDamageCooldown((c) => Math.max(0, c - 1)), 50);
+    return () => clearInterval(id);
+  }, [tapDamageCooldown]);
+
+  const handleRestart = useCallback(() => {
+    setWave(0);
+    setCoins(100);
+    setScore(0);
+    setBaseHp(BASE_HP_MAX);
+    setGameOver(false);
+    setVictory(false);
+    setWaveCleared(false);
+    setWaveAnnouncement(null);
+    setKnowledgeGateModal(null);
+    setUpgradeTarget(null);
+    setQuestionModal(null);
+    setPreviewCell(null);
+    setScreenShake(0);
+    setTapDamageCooldown(0);
+    setGameStats({ towersBuilt: 0, zombiesKilled: 0 });
+    stateRef.current.zombies = [];
+    stateRef.current.towers = [];
+    stateRef.current.projectiles = [];
+    stateRef.current.particles = [];
+    stateRef.current.waveActive = false;
+    startWave();
+  }, [startWave]);
+
+  const getTowerUpgradeTooltip = useCallback((t: Tower) => {
+    const stats = getTowerStats(t);
+    const base = TOWER_BASE[t.type];
+    const nextDmg = t.level < 3 ? Math.floor(base.damage * Math.pow(UPGRADE_MULT.damage, t.level)) : stats.damage;
+    const nextRange = t.level < 3 ? base.range * CELL * Math.pow(UPGRADE_MULT.range, t.level) : stats.range;
+    return `Lv${t.level} → Lv${Math.min(t.level + 1, 3)}: Dmg ${stats.damage}→${nextDmg}, Range +20%`;
+  }, [getTowerStats]);
+
+  const getTowerDescription = useCallback((type: TowerType) => {
+    const cfg = TOWER_BASE[type];
+    const rangeCell = Math.round(cfg.range);
+    return `${type}: ${cfg.damage} dmg, ${rangeCell} cells, ${cfg.cost} coins`;
+  }, []);
+
+  return (
+    <div className="game-card overflow-hidden bg-gray-50 border border-gray-200 rounded-xl shadow-sm">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 flex-wrap gap-2">
+        <div className="flex items-center gap-4 text-gray-800 text-sm flex-wrap">
+          <span className="font-bold">WAVE {Math.max(0, wave)}</span>
+          <span className="font-bold text-amber-600">Coins {coins}</span>
+          <span className="font-bold">Score {score}</span>
+          <span className="font-bold text-red-600">HP {baseHp}/{BASE_HP_MAX}</span>
+          {stateRef.current.waveActive && waveProgress && (
+            <span className="text-xs text-gray-600">Zombies: {waveProgress.remaining}/{waveProgress.total}</span>
+          )}
+          {tapDamageCooldown > 0 && (
+            <span className="text-xs text-gray-500">Tap dmg: {(tapDamageCooldown / 20).toFixed(1)}s</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setFastForward((ff) => !ff)}
+            className={`px-2 py-1 text-xs rounded border font-medium ${
+              fastForward ? 'bg-amber-100 border-amber-400 text-amber-800' : 'bg-white border-gray-200 text-gray-600'
+            }`}
+          >
+            ⏩ {fastForward ? '2x' : '1x'}
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {(Object.entries(TOWER_BASE) as [TowerType, (typeof TOWER_BASE)[TowerType]][]).map(([type, cfg]) => {
+            const info = TOWER_INFO[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => { setPlacingTower(placingTower === type ? null : type); setPreviewCell(null); }}
+                disabled={coins < cfg.cost || stateRef.current.waveActive}
+                className={`min-h-[48px] px-3 py-2 text-left rounded-lg border transition-colors flex flex-col ${
+                  placingTower === type
+                    ? 'bg-gray-100 border-gray-400 ring-2 ring-offset-1 ring-gray-400'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                } text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <span className="font-bold text-sm">{info.icon} {info.label}</span>
+                <span className="text-[10px] text-gray-500">{info.desc} · {cfg.cost}🪙</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-800 hover:bg-gray-50"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+      {waveProgress && stateRef.current.waveActive && (
+        <div className="h-1.5 bg-gray-200 overflow-hidden">
+          <div
+            className="h-full bg-amber-500 transition-all duration-200"
+            style={{ width: `${Math.max(0, (waveProgress.total - waveProgress.remaining) / waveProgress.total) * 100}%` }}
+          />
+        </div>
+      )}
+
+      <div
+        ref={canvasContainerRef}
+        className={`relative bg-gray-50 overflow-hidden transition-transform ${screenShake ? 'animate-shake' : ''}`}
+        style={screenShake ? { animation: 'zombie-shake 0.4s ease-out' } : undefined}
+      >
+        <style>{`
+          @keyframes zombie-shake {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-8px, -4px); }
+            40% { transform: translate(8px, 4px); }
+            60% { transform: translate(-6px, 4px); }
+            80% { transform: translate(6px, -4px); }
+          }
+        `}</style>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_W}
+          height={CANVAS_H}
+          className="block w-full max-w-full h-auto border-b border-gray-200 cursor-crosshair touch-none"
+          onClick={handleCanvasClick}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseLeave={handleCanvasMouseLeave}
+          onTouchStart={handleCanvasTouchStart}
+          onTouchMove={handleCanvasTouchMove}
+          onTouchEnd={handleCanvasTouchEnd}
+        />
+
+        {waveAnnouncement !== null && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none z-15"
+            style={{ animation: 'wave-announce 2s ease-out forwards' }}
+          >
+            <style>{`
+              @keyframes wave-announce {
+                0% { opacity: 0; transform: scale(0.5); }
+                15% { opacity: 1; transform: scale(1.2); }
+                25% { transform: scale(1); }
+                85% { opacity: 1; }
+                100% { opacity: 0; transform: scale(1); }
+              }
+              @keyframes boss-pulse {
+                0%, 100% { box-shadow: 0 0 20px rgba(239,68,68,0.8); }
+                50% { box-shadow: 0 0 40px rgba(239,68,68,1); }
+              }
+            `}</style>
+            <div
+              className={`px-12 py-6 rounded-2xl font-black text-3xl text-white shadow-2xl ${
+                waveAnnouncement > 0 && waveAnnouncement % 5 === 0
+                  ? 'bg-gradient-to-r from-red-600 to-rose-700'
+                  : 'bg-gradient-to-r from-amber-500 to-orange-600'
+              }`}
+              style={waveAnnouncement > 0 && waveAnnouncement % 5 === 0 ? { animation: 'boss-pulse 0.5s ease-in-out 3' } : undefined}
+            >
+              {waveAnnouncement > 0 && waveAnnouncement % 5 === 0 ? '⚠️ BOSS WAVE ⚠️' : `WAVE ${waveAnnouncement}`}
+            </div>
+          </div>
+        )}
+
+        {questionModal && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20 p-4">
+            <div className="bg-gray-50 rounded-xl p-5 max-w-md shadow-xl border border-gray-200">
+              <p className="text-amber-600 font-bold text-sm mb-2">Answer correctly = free tower! Wrong = double cost</p>
+              <p className="text-gray-800 font-medium mb-4">{questionModal.question.question}</p>
+              <div className="flex flex-col gap-2">
+                {questionModal.question.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => answerQuestion(i, questionModal.col, questionModal.row, questionModal.type)}
+                    className="text-left px-4 py-3 border border-gray-200 rounded-lg bg-white text-gray-800 hover:bg-gray-100 transition-colors"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {knowledgeGateModal && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20 p-4">
+            <div className="bg-gray-50 rounded-xl p-5 max-w-md shadow-xl border border-gray-200">
+              <p className="font-bold text-gray-800 mb-2">Knowledge Gate — Answer to start next wave</p>
+              <p className="text-gray-800 font-medium mb-4">{knowledgeGateModal.question}</p>
+              <div className="flex flex-col gap-2">
+                {knowledgeGateModal.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => answerKnowledgeGate(i)}
+                    className="text-left px-4 py-3 border border-gray-200 rounded-lg bg-white text-gray-800 hover:bg-gray-100 transition-colors"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {upgradeTarget && (() => {
+          const tx = upgradeTarget.col * CELL + CELL / 2;
+          const ty = upgradeTarget.row * CELL + CELL / 2;
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const containerRect = canvasContainerRef.current?.getBoundingClientRect();
+          const scaleX = rect && containerRect ? rect.width / 512 : 1;
+          const scaleY = rect && containerRect ? rect.height / 384 : 1;
+          const panelW = 208;
+          const relX = rect && containerRect ? tx * scaleX - panelW / 2 : 0;
+          const relY = ty * scaleY < 192 ? (ty + 24) * scaleY : (ty - 100) * scaleY;
+          const left = Math.max(8, Math.min(relX, (rect?.width ?? 400) - panelW - 8));
+          const top = Math.max(8, Math.min(relY, (rect?.height ?? 300) - 130));
+          return (
+            <div
+              className="absolute bg-gray-50 rounded-lg p-3 shadow-xl border-2 border-gray-200 z-10 w-52"
+              style={{ left, top }}
+            >
+              <p className="text-sm font-bold text-gray-800 mb-1">
+                {TOWER_INFO[upgradeTarget.type].icon} {upgradeTarget.type} — Lv{upgradeTarget.level}
+              </p>
+              <p className="text-xs text-gray-600 mb-2" title={getTowerUpgradeTooltip(upgradeTarget)}>
+                Dmg: {getTowerStats(upgradeTarget).damage} · Range: {Math.round(getTowerStats(upgradeTarget).range / CELL)} cells
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => upgradeTower(upgradeTarget)}
+                  disabled={upgradeTarget.level >= 3 || coins < getUpgradeCost(upgradeTarget)}
+                  className="px-3 py-2 text-xs font-medium rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 disabled:opacity-50"
+                >
+                  Upgrade ({getUpgradeCost(upgradeTarget)}🪙)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sellTower(upgradeTarget)}
+                  className="px-3 py-2 text-xs font-medium rounded-lg bg-red-100 text-red-800 border border-red-300 hover:bg-red-200"
+                >
+                  Sell ({getSellValue(upgradeTarget)}🪙)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUpgradeTarget(null)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white text-gray-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {waveCleared && !stateRef.current.waveActive && !questionModal && !knowledgeGateModal && wave < 10 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+            <div className="bg-gray-50 rounded-xl p-5 shadow-xl border border-gray-200 text-center">
+              <p className="font-bold text-lg text-gray-800 mb-3">Wave {wave} cleared!</p>
+              <p className="text-gray-600 text-sm mb-3">Answer the Knowledge Gate to continue.</p>
+              <p className="text-gray-500 text-xs">(Gate will appear automatically)</p>
+            </div>
+          </div>
+        )}
+
+        {wave === 0 && !stateRef.current.waveActive && !questionModal && !knowledgeGateModal && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+            <div className="bg-gray-50 rounded-xl p-5 shadow-xl border border-gray-200 text-center max-w-sm">
+              <p className="font-bold text-lg text-gray-800 mb-3">Ready to defend!</p>
+              <ul className="text-left text-sm text-gray-600 mb-4 space-y-1">
+                <li>• Tap tower type, then tap grid to place (answer question)</li>
+                <li>• Preview shows range; green = valid, red = invalid</li>
+                <li>• Tap zombies to deal 1 damage (cooldown)</li>
+                <li>• Tap placed towers to upgrade (Lv1→2→3)</li>
+                <li>• Boss waves (5, 10) — screen shakes on boss death</li>
+              </ul>
+              <button
+                type="button"
+                onClick={() => startWave()}
+                className="px-5 py-2.5 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-medium hover:bg-amber-200"
+              >
+                Start Wave 1
+              </button>
+            </div>
+          </div>
+        )}
+
+        {victory && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+            <div className="bg-gray-50 rounded-xl p-6 shadow-xl border border-gray-200 text-center max-w-sm">
+              <h3 className="font-bold text-2xl text-gray-800 mb-2">Victory!</h3>
+              <p className="text-gray-700 mb-2">You defended all 10 waves!</p>
+              <div className="bg-gray-100 rounded-lg p-4 mb-4 text-left text-sm">
+                <p className="font-bold text-gray-800 mb-2">Stats</p>
+                <p className="text-gray-600">Towers built: {gameStats.towersBuilt}</p>
+                <p className="text-gray-600">Zombies killed: {gameStats.zombiesKilled}</p>
+                <p className="text-gray-600 font-bold mt-1">Final score: {score}</p>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  className="px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-medium"
+                >
+                  Play Again
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-gray-800"
+                >
+                  Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {gameOver && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
+            <div className="bg-gray-50 rounded-xl p-6 shadow-xl border border-gray-200 text-center max-w-sm">
+              <h3 className="font-bold text-2xl text-gray-800 mb-2">Game Over</h3>
+              <p className="text-gray-700 mb-2">Base destroyed!</p>
+              <div className="bg-gray-100 rounded-lg p-4 mb-4 text-left text-sm">
+                <p className="font-bold text-gray-800 mb-2">Stats</p>
+                <p className="text-gray-600">Wave reached: {wave}</p>
+                <p className="text-gray-600">Towers built: {gameStats.towersBuilt}</p>
+                <p className="text-gray-600">Zombies killed: {gameStats.zombiesKilled}</p>
+                <p className="text-gray-600 font-bold mt-1">Final score: {score}</p>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  className="px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-medium"
+                >
+                  Play Again
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-gray-800"
+                >
+                  Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <p className="p-2.5 text-center text-xs text-gray-600 border-t border-gray-200 bg-gray-50">
+        Tap to place towers · Tap zombies (1 dmg) · Upgrade by tapping towers.
+        <span className="block mt-0.5">Zombies: {Object.entries(ZOMBIE_LEGEND).map(([k, v]) => v).join(' · ')}</span>
+        <span className="block mt-0.5">Preview: green=valid, red=invalid. Boss waves (5,10) = screen shake.</span>
+      </p>
+    </div>
+  );
+}
