@@ -26,7 +26,7 @@ async function autoFulfillPhysical(session: Stripe.Checkout.Session) {
 
   if (physicalItems.length === 0) return;
 
-  const shipping = session.shipping_details;
+  const shipping = (session as any).shipping_details;
   if (!shipping?.address) {
     console.log(`[FULFILL] No shipping address for ${session.id}, manual fulfillment needed`);
     return;

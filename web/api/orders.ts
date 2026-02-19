@@ -35,7 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sessions = await stripe.checkout.sessions.list({
       limit: 50,
       status: 'complete',
-      expand: ['data.shipping_details'],
     });
 
     const orders = sessions.data
@@ -46,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const physicalItems = items.filter(id => PHYSICAL_IDS.has(id));
         const hasPhysical = physicalItems.length > 0;
         const hasDigital = items.some(id => !PHYSICAL_IDS.has(id));
-        const shipping = s.shipping_details as Stripe.Checkout.Session.ShippingDetails | null;
+        const shipping = (s as any).shipping_details as { name?: string; address?: { line1?: string; line2?: string; city?: string; state?: string; postal_code?: string; country?: string } } | null;
 
         return {
           id: s.id,
